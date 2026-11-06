@@ -8,7 +8,7 @@
 /* Layout: one calm column. Top bar, a slim focus bar (timer + tasks), then the page. Seasons only swap color tokens. */
 :root{
   --bg:#EDF0F4; --surface:#FFFFFF; --surface2:#F4F6F9; --ink:#101722; --muted:#566175; --line:#D7DDE6;
-  --accent:#2D5BFF; --accent-ink:#FFFFFF; --credit:#A86200; --ok:#17814F; --bad:#C23A3A; --pat:none;
+  --accent:#2D5BFF; --accent-ink:#FFFFFF; --credit:#A86200; --ok:#17814F; --bad:#C23A3A; --pat:none; --glow:var(--accent);
   --font-display:'Bricolage Grotesque','DM Sans',system-ui,sans-serif;
   --font-body:'DM Sans',system-ui,sans-serif;
   --font-mono:'JetBrains Mono',ui-monospace,monospace;
@@ -75,6 +75,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .tile .ini{font-family:var(--font-display);font-size:34px;font-weight:700;opacity:.85}
 .tile .nm{position:absolute;left:10px;bottom:8px;right:10px;font-size:13px;font-weight:500;text-shadow:0 1px 3px #0009;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile.you{outline:2px solid var(--accent);outline-offset:-2px}
+.tile{transition:box-shadow .15s}.tile.speaking{z-index:2;box-shadow:0 0 0 3px var(--glow,var(--accent)),0 0 22px 6px color-mix(in srgb,var(--glow,var(--accent)) 65%,transparent)}
 .tile .off{position:absolute;inset:0;display:grid;place-items:center;background:#111b;font-size:13px;text-align:center;padding:10px}
 .pinned{position:absolute;left:8px;top:8px;background:#0007;color:#fff;border-radius:6px;padding:1px 7px;font-size:11px}
 .dots{position:absolute;right:6px;top:6px;background:#0007;border:0;color:#fff;border-radius:8px;width:30px;height:30px;font-size:18px;line-height:1}
@@ -163,7 +164,7 @@ const SEASONS={
 })();
 
 const S={
-  screen:'signin',authMode:'in',uid:null,role:'user',nav:'main',roomId:null,page:0,owner:false,season:'thanksgiving',adminTab:'reports',
+  screen:'signin',authMode:'in',uid:null,role:'user',live:'off',dmIds:{},nav:'main',roomId:null,page:0,owner:false,season:'thanksgiving',adminTab:'reports',
   user:{name:'',bio:'',major:'',pfp:''},
   cam:true,mic:false,credits:0,streak:0,acc:0,sinceCheck:0,afk:false,check:null,
   pins:[],menuFor:null,modal:null,settings:false,dockOpen:false,speed:1,drawer:null,chatOpen:true,
@@ -203,6 +204,7 @@ const logo=()=>'<div class="logo"><i></i>CoreFocus</div>';
 const gate=inner=>'<div class="center"><div class="gate">'+logo()+inner+'</div></div>';
 function screenHTML(){
   switch(S.screen){
+  case'loading':return gate('<p class="muted">Loading your account...</p>');
   case'signin':return authHTML();
   case'locked':return gate('<div class="big">Come back at 16</div><p class="muted">CoreFocus is for people aged 16 and over, so we cannot let you in yet. We did not save your date of birth or any details from this sign-in.</p><p class="muted">You are always welcome once you turn 16.</p><button class="btn" data-act="restart">Back to the start</button>');
   case'timeout':return gate('<div class="big">Penalty box</div><p class="muted">You were put on a timeout for breaking the room rules.<br>Reason: mic abuse (flagged phrase at 12:04:18).</p><div class="mono" style="font-size:44px" id="toLeft">'+fmt(S.timeoutLeft)+'</div><p class="muted">Camera, mic and chat come back when the timer reaches zero.</p>');
@@ -278,7 +280,7 @@ function tasksHTML(){
 }
 function dmHTML(){
   const w=S.dmWith,msgs=S.dms[w]||[];
-  return'<div class="drawer" role="dialog" aria-label="Messages"><div class="row spread"><h3>Messages</h3><button class="btn sm" data-act="drawer" data-arg="">Close</button></div><div class="row">'+Object.keys(S.dms).map(n=>'<button class="btn sm'+(n===w?' pri':'')+'" data-act="dmwith" data-arg="'+esc(n)+'">'+esc(n)+'</button>').join('')+'</div><div class="msgs" style="gap:6px">'+msgs.map(m=>'<div class="bubble'+(m.me?' me':'')+'">'+esc(m.t)+'</div>').join('')+'</div>'+(S.dms[w]?'<form id="dmForm" class="row" style="flex-wrap:nowrap"><input id="dmIn" style="flex:1" placeholder="Message '+esc(w)+'" autocomplete="off"><button class="btn pri">Send</button></form>':'<p class="muted">No messages yet. Use the three dots on a tile and choose Message.</p>')+'<p class="note">Preview: messages stay on this device until the real app is connected.</p></div>';
+  return'<div class="drawer" role="dialog" aria-label="Messages"><div class="row spread"><h3>Messages</h3><button class="btn sm" data-act="drawer" data-arg="">Close</button></div><div class="row">'+Object.keys(S.dms).map(n=>'<button class="btn sm'+(n===w?' pri':'')+'" data-act="dmwith" data-arg="'+esc(n)+'">'+esc(n)+'</button>').join('')+'</div><div class="msgs" style="gap:6px">'+msgs.map(m=>'<div class="bubble'+(m.me?' me':'')+'">'+esc(m.t)+'</div>').join('')+'</div>'+(S.dms[w]?'<form id="dmForm" class="row" style="flex-wrap:nowrap"><input id="dmIn" style="flex:1" placeholder="Message '+esc(w)+'" autocomplete="off"><button class="btn pri">Send</button></form>':'<p class="muted">No messages yet. Use the three dots on a tile and choose Message.</p>')+'<p class="note">Direct messages go to people in your current room and are not saved.</p></div>';
 }
 function shopHTML(){
   const cats=[...new Set(SHOP.map(i=>i.c))];
@@ -357,7 +359,7 @@ const A={
     if(!r.data.session){toast('Check your email to confirm your account, then sign in.');S.authMode='in';render();return}
     await enter(r.data.user)},
   signout(){S.settings=false;if(sb)sb.auth.signOut()},
-  profilego(){if(!S.user.name.trim()){toast('Enter a display name to continue.');return}S.screen='app';saveProfile();render()},
+  async profilego(){if(!S.user.name.trim()){toast('Enter a display name to continue.');return}if(!await saveProfile())return;S.screen='app';render()},
   pfpdel(){S.user.pfp='';saveProfile();render()},
   restart(){S.screen='signin';render()},
   jump(a){if(a==='timeout')S.timeoutLeft=600;S.screen=a;render()},
@@ -369,7 +371,7 @@ const A={
   page(a){S.page=Math.max(0,S.page+(+a));S.menuFor=null;render()},
   pin(a){const i=S.pins.indexOf(a);if(i>=0)S.pins.splice(i,1);else if(S.pins.length>=4){toast('You can pin up to 4 people.');return}else S.pins.push(a);S.menuFor=null;render()},
   menu(a){S.menuFor=S.menuFor===a?null:a;render()},
-  msgto(a){S.menuFor=null;if(!S.dms[a])S.dms[a]=[];S.dmWith=a;S.drawer='dm';render()},
+  msgto(a){S.menuFor=null;if(!S.dms[a])S.dms[a]=[];const pr=PEERS.find(p=>p.n===a);if(pr)S.dmIds[a]=pr.id;S.dmWith=a;S.drawer='dm';render()},
   report(a){const i=a.lastIndexOf('|');S.menuFor=null;S.modal={t:'report',who:a.slice(0,i),why:a.slice(i+1)};render()},
   async sendreport(){const m=S.modal,r=room(),f=r.feat;const rules='Mic '+(f.mic?'ON':'OFF')+', Chat '+(f.chat?'ON':'OFF')+', Share '+(f.share?'ON':'OFF');
     const ev=m.why==='Mic audio'?'30-second audio clip':m.why==='Text chat'?'last 5 minutes of chat':'camera frames and focus signals';
@@ -385,7 +387,8 @@ const A={
   task(a){S.tasks[a].d=!S.tasks[a].d;render()},
   reply(a){S.replyTo=a==='x'?null:+a;render();const i=$('#chatIn');if(i)i.focus()},
   share(){
-    if(!lk){toast('Join a room first.');return}
+    if(!S.roomId){toast('Join a room first.');return}
+    if(S.live!=='on'||!lk){if(S.live==='connecting')toast('Still connecting to the room. Try again in a moment.');else{toast('Reconnecting to the room...');joinLive(S.roomId)}return}
     if(S.cool>0){toast('Wait '+fmt(S.cool)+' before requesting a screen share again.');return}
     syncShare();
     if(SH.cur&&SH.cur.who==='You'){toast('You are already sharing.');return}
@@ -397,7 +400,7 @@ const A={
   redeem(a){const i=SHOP[a];if(S.credits<i.p)return;S.credits-=i.p;ledger(-i.p,'redeem: '+i.n);if(S.goal===+a)S.goal=null;toast('Unlocked: '+esc(i.n));render()},
   goal(a){S.goal=S.goal===+a?null:+a;S.goalHit=false;render()},
   settings(){S.settings=true;render()},
-  closeset(){S.settings=false;render()},
+  async closeset(){const ok=await saveProfile();if(!ok&&!S.fail){S.fail=1;return}S.fail=0;S.settings=false;render()},
   sw(a){S[a]=!S[a];if(a==='dnd')toast(S.dnd?'Do not disturb is on.':'Do not disturb is off.')},
   drawer(a){S.drawer=a||null;render()},
   dmwith(a){S.dmWith=a;render()},
@@ -419,7 +422,6 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='pfpIn'&&t.files&&t.files[0])readPfp(t.files[0]);
-  if(t.dataset&&t.dataset.bind)saveProfile();
   if(t.id==='amb'){S.ambient=t.value;setAmbient()}
   if(t.id==='pcat')P.cat=t.value;
   if(t.id==='pw'){P.work=Math.max(5,Math.min(90,+t.value||25));if(!P.running&&P.phase==='focus'){P.left=P.work*60}}
@@ -440,7 +442,11 @@ document.addEventListener('submit',e=>{
     if(lk){const rp=S.replyTo!==null&&S.chat[S.replyTo]?'Replying to '+S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):'';lk.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({n:String(S.user.name||'Guest').slice(0,24),t:v.slice(0,300),r:rp})),{reliable:true,topic:'chat'}).catch(()=>toast('Message not sent. Try again.'))}
     S.chat.push({who:'You',t:v,rep:S.replyTo!==null&&S.chat[S.replyTo]?'Replying to '+S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):''});S.replyTo=null;render();$('#chatIn').focus()}
   if(id==='taskForm'){const v=$('#taskIn').value.trim();if(!v)return;S.tasks.push({t:v,d:false});render();$('#taskIn').focus()}
-  if(id==='dmForm'){const v=$('#dmIn').value.trim();if(!v)return;S.dms[S.dmWith].push({me:true,t:v});render();$('#dmIn').focus()}
+  if(id==='dmForm'){const v=$('#dmIn').value.trim();if(!v)return;
+    const to=S.dmIds[S.dmWith]||(PEERS.find(p=>p.n===S.dmWith)||{}).id;
+    if(!lk||!to||!PEERS.some(p=>p.id===to)){toast('That person is not in this room right now.');return}
+    lk.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({n:String(S.user.name||'Guest').slice(0,24),t:v.slice(0,300)})),{reliable:true,topic:'dm',destinationIdentities:[to]}).catch(()=>toast('Message not sent. Try again.'));
+    S.dms[S.dmWith].push({me:true,t:v});render();$('#dmIn').focus()}
   if(id==='roomForm'){const g=x=>document.getElementById(x);const title=g('rt').value.trim();if(!title)return;
     sb.from('rooms').insert({name:title,mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked,cap:+g('rl').value,official:false,host_id:S.uid,host_name:S.user.name}).select().single().then(({data,error})=>{if(error||!data){toast('Could not create the room.');return}
       ROOMS[data.id]={id:data.id,name:data.name,feat:{mic:data.mic,chat:data.chat,share:data.share},cap:data.cap,host:'You',hostId:S.uid};S.modal=null;A.join(data.id)})}
@@ -472,10 +478,21 @@ function save(){try{const o={};KEYS.forEach(k=>o[k]=S[k]);localStorage.setItem('
 try{const o=JSON.parse(localStorage.getItem('corefocus3')||'null');if(o){KEYS.forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});if(!SEASONS[S.season])S.season='thanksgiving';}}catch(e){}
 
 /* ---------- Supabase (auth + data) and LiveKit (video) ---------- */
-const LK=window.LivekitClient;let lk=null,PEERS=[],VIS=new Set(),VID={},sb=null;
-function softRender(){if(S.screen!=='app'||S.modal||S.menuFor)return;const a=document.activeElement,keep=a&&a.id==='chatIn'?a.value:null;render();if(keep!==null){const i=$('#chatIn');if(i){i.value=keep;i.focus()}}}
+const LK=window.LivekitClient;let lk=null,PEERS=[],VIS=new Set(),VID={},sb=null,SPK=new Set(),lastSaved='',saving=null,lastErr=0;
+function softRender(){if(S.screen!=='app'||S.modal||S.menuFor)return;const a=document.activeElement,id=a&&(a.id==='chatIn'||a.id==='dmIn')?a.id:null,keep=id?a.value:null;render();if(id){const i=document.getElementById(id);if(i){i.value=keep;i.focus()}}}
+function markSpeaking(){document.querySelectorAll('.tile[data-pid]').forEach(t=>t.classList.toggle('speaking',SPK.has(t.dataset.pid)))}
+function incomingDM(p,d){if(!p||!d||typeof d.t!=='string'||S.dnd)return;const n=String(p.name||d.n||'Guest').slice(0,24);S.dmIds[n]=p.identity;(S.dms[n]=S.dms[n]||[]).push({me:false,t:d.t.slice(0,300)});
+  if(S.drawer==='dm'&&S.dmWith===n)softRender();else{const el=toast('<b>'+esc(n)+'</b>: '+esc(d.t.slice(0,80)),'dm');el.onclick=()=>{S.dmWith=n;S.drawer='dm';render();el.remove()}}}
 function ledger(d,why){if(sb&&S.uid)sb.from('credit_ledger').insert({user_id:S.uid,delta:d,reason:why}).then(r=>{if(r.error)console.warn(r.error.message)})}
-function saveProfile(){if(sb&&S.uid)sb.from('profiles').update({name:S.user.name,bio:S.user.bio,major:S.user.major,avatar:S.user.pfp}).eq('id',S.uid).then(r=>{if(r.error)toast('Could not save your profile.')});syncPresence()}
+async function saveProfile(){
+  if(!sb||!S.uid){syncPresence();return true}
+  const row={id:S.uid,name:S.user.name||'',bio:S.user.bio||'',major:S.user.major||'',avatar:S.user.pfp||'',role:S.role||'user'},k=JSON.stringify(row);
+  if(k===lastSaved){syncPresence();return true}
+  if(saving)await saving;
+  saving=sb.from('profiles').upsert(row,{onConflict:'id'});
+  const {error}=await saving;saving=null;
+  if(error){if(Date.now()-lastErr>8000){lastErr=Date.now();toast('Could not save your profile: '+esc(error.message))}return false}
+  lastSaved=k;syncPresence();return true}
 async function loadRooms(){const {data}=await sb.from('rooms').select('*').eq('official',false).order('created_at');
   Object.keys(ROOMS).forEach(k=>{if(!ROOMS[k].off)delete ROOMS[k]});
   (data||[]).forEach(r=>{ROOMS[r.id]={id:r.id,name:r.name,feat:{mic:!!r.mic,chat:!!r.chat,share:!!r.share},cap:r.cap||20,host:r.host_name||'Member',hostId:r.host_id}})}
@@ -484,7 +501,7 @@ async function loadReports(){const {data}=await sb.from('reports').select('*').o
 async function enter(u){
   S.uid=u.id;
   let {data:p}=await sb.from('profiles').select('*').eq('id',u.id).maybeSingle();
-  if(!p){const r=await sb.from('profiles').insert({id:u.id}).select().single();p=r.data||{}}
+  p=p||{};if(p.id)lastSaved=JSON.stringify({id:p.id,name:p.name||'',bio:p.bio||'',major:p.major||'',avatar:p.avatar||'',role:p.role||'user'});
   if(p.role==='banned'){S.screen='ban';render();return}
   S.role=p.role||'user';S.owner=S.role==='admin'||S.role==='owner';S.ok16=true;
   S.user={name:p.name||'',bio:p.bio||'',major:p.major||'',pfp:p.avatar||''};
@@ -500,7 +517,7 @@ function syncPresence(){if(!lk)return;const lp=lk.localParticipant;
 function refreshPeers(){if(!lk)return;const Src=LK.Track.Source;
   PEERS=[...lk.remoteParticipants.values()].map(p=>{const c=p.getTrackPublication(Src.Camera),m=p.getTrackPublication(Src.Microphone);return{id:p.identity,n:String(p.name||'Guest').slice(0,24),cam:!!(c&&!c.isMuted),mic:!!(m&&!m.isMuted)}});
   softRender()}
-function leaveLive(){if(lk){lk.disconnect();lk=null}PEERS=[];VID={};VIS=new Set();const a=$('#audioBox');if(a)a.innerHTML='';SH.cur=null;SH.queue=[];SH.mine=false;SH.liveAt=0}
+function leaveLive(){if(lk){lk.disconnect();lk=null}S.live='off';SPK=new Set();PEERS=[];VID={};VIS=new Set();const a=$('#audioBox');if(a)a.innerHTML='';SH.cur=null;SH.queue=[];SH.mine=false;SH.liveAt=0}
 /* screen share queue: each person's request lives in their own LiveKit participant metadata {q:requestedAt,live:startedAt}.
    Everyone sorts the same list, so every client agrees on who is live and who is next. */
 function setMeta(o){if(lk)lk.localParticipant.setMetadata(JSON.stringify(o)).catch(()=>toast('Could not update the share queue.'))}
@@ -519,7 +536,7 @@ function myTurn(){const c=SH.cur;if(!c||c.id!==S.uid)return;
 function endShare(auto){SH.mine=false;SH.liveAt=0;S.cool=300;if(lk){lk.localParticipant.setScreenShareEnabled(false).catch(()=>{});setMeta({})}if(auto)toast('Your 15 minutes are up.');render()}
 /* video: only the people on the current page stay subscribed, so big rooms stay light */
 function attachMedia(){
-  if(!lk||!S.roomId)return;const Src=LK.Track.Source;
+  if(!lk||!S.roomId)return;const Src=LK.Track.Source;markSpeaking();
   lk.remoteParticipants.forEach(p=>{const pub=p.getTrackPublication(Src.Camera),want=VIS.has(p.identity);if(pub&&pub.isSubscribed!==want)pub.setSubscribed(want)});
   const put=(key,pub,host,first)=>{let v=VID[key];const tr=pub&&pub.track;
     if(tr&&!pub.isMuted){if(!v||v.dataset.sid!==pub.trackSid){if(v)v.remove();v=tr.attach();v.dataset.sid=pub.trackSid;v.muted=true;if(key==='me')v.style.transform='scaleX(-1)';VID[key]=v}
@@ -531,12 +548,13 @@ function attachMedia(){
     if(p)put('stage',p.getTrackPublication(Src.ScreenShare),st);else if(VID.stage){VID.stage.remove();delete VID.stage}}
 }
 async function joinLive(id){
-  leaveLive();S.chat=[];
+  leaveLive();S.chat=[];S.live='connecting';
   try{
-    if(!sb||!LK)throw new Error('missing libs');
+    if(!sb||!LK)throw new Error('Supabase or LiveKit library did not load');
     const {data,error}=await sb.functions.invoke('livekit-token',{body:{room:'cf-'+id}});
-    if(error||!data||!data.token)throw error||new Error('no token');
-    if(S.roomId!==id)return;
+    if(error)throw error;
+    if(!data||!data.token)throw new Error('The token function returned no token');
+    if(S.roomId!==id){S.live='off';return}
     const r=new LK.Room({adaptiveStream:true,dynacast:true}),E=LK.RoomEvent;lk=r;
     [E.ParticipantConnected,E.ParticipantDisconnected,E.TrackPublished,E.TrackUnpublished,E.TrackMuted,E.TrackUnmuted,E.ParticipantNameChanged].forEach(ev=>r.on(ev,refreshPeers));
     r.on(E.TrackSubscribed,t=>{if(t.kind==='audio')$('#audioBox').appendChild(t.attach());refreshPeers()});
@@ -544,20 +562,28 @@ async function joinLive(id){
     r.on(E.LocalTrackPublished,()=>softRender());
     r.on(E.LocalTrackUnpublished,pub=>{if(SH.mine&&pub.source===LK.Track.Source.ScreenShare)endShare(false);else softRender()});
     r.on(E.ParticipantMetadataChanged,()=>{syncShare();rr('shareBar',shareBarHTML);attachMedia()});
-    r.on(E.DataReceived,(buf,p,kind,topic)=>{if(topic!=='chat')return;let d;try{d=JSON.parse(new TextDecoder().decode(buf))}catch(e){return}
+    r.on(E.ActiveSpeakersChanged,sp=>{SPK=new Set(sp.map(p=>p===r.localParticipant?'me':p.identity));markSpeaking()});
+    r.on(E.DataReceived,(buf,p,kind,topic)=>{let d;try{d=JSON.parse(new TextDecoder().decode(buf))}catch(e){return}
+      if(topic==='dm'){incomingDM(p,d);return}if(topic!=='chat')return;
       if(!d||typeof d.t!=='string')return;S.chat.push({who:String((p&&p.name)||d.n||'Guest').slice(0,24),t:d.t.slice(0,300),rep:typeof d.r==='string'?d.r.slice(0,90):''});softRender()});
-    r.on(E.Disconnected,()=>{if(lk===r){lk=null;PEERS=[];toast('Disconnected from the room.')}});
+    r.on(E.Disconnected,()=>{if(lk===r){lk=null;S.live='off';PEERS=[];SPK=new Set();toast('Disconnected from the room.')}});
     await r.connect(CFG.lk,data.token);
-    if(S.roomId!==id){r.disconnect();if(lk===r)lk=null;return}
-    syncPresence();refreshPeers();
-  }catch(e){lk=null;toast('Could not start live video. Check your LiveKit setup.')}
+    if(S.roomId!==id){r.disconnect();if(lk===r)lk=null;S.live='off';return}
+    S.live='on';syncPresence();refreshPeers();
+  }catch(e){
+    try{if(lk)lk.disconnect()}catch(_){}
+    lk=null;S.live='off';let m=(e&&e.message)||'unknown error';
+    try{if(e&&e.context&&e.context.text)m=await e.context.text()}catch(_){}
+    toast('Could not start live video: '+esc(String(m).slice(0,160)))}
 }
 (async function boot(){
   if(!window.supabase||CFG.url.includes('YOUR-')){toast('Add your Supabase and LiveKit keys at the top of the script.');return}
+  try{if(Object.keys(localStorage).some(k=>/^sb-.*-auth-token$/.test(k)))S.screen='loading'}catch(e){}
   sb=window.supabase.createClient(CFG.url,CFG.key);
   sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'){leaveLive();S.roomId=null;S.uid=null;S.owner=false;S.credits=0;S.user={name:'',bio:'',major:'',pfp:''};S.screen='signin';render()}});
-  const {data}=await sb.auth.getSession();
-  if(data.session)await enter(data.session.user);
+  try{const {data}=await sb.auth.getSession();
+    if(data.session)await enter(data.session.user);else if(S.screen==='loading'){S.screen='signin';render()}
+  }catch(e){S.screen='signin';render();toast('Could not restore your session. Please sign in.')}
 })();
 render();
 })();
