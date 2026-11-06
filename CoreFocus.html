@@ -1,5 +1,7 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>CoreFocus</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.7/dist/livekit-client.umd.min.js"></script>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -82,6 +84,7 @@ input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .menu button:hover:not([disabled]){background:var(--surface2)}
 .menu button[disabled]{color:var(--muted);text-decoration:line-through;cursor:not-allowed}
 .menu .label{padding:8px 10px 2px;display:block}
+.tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}#shareStage:empty{display:none}#shareStage video{width:100%;max-height:60vh;border-radius:12px;background:#000}
 .pager{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
 .chat{display:flex;flex-direction:column;gap:10px;max-height:480px}
 .msgs{overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:140px;flex:1}
@@ -113,6 +116,7 @@ td,th{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-a
 </style>
 <div id="root"></div>
 <div id="toasts" aria-live="polite"></div>
+<div id="audioBox" hidden></div>
 <script>
 (function(){
 const $=s=>document.querySelector(s);
@@ -120,6 +124,8 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const fmt=s=>{s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
 const hue=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;return h};
 const PER=12;
+/* ---------- YOUR KEYS (anon key and LiveKit URL are safe in the browser) ---------- */
+const CFG={url:'https://YOUR-PROJECT.supabase.co',key:'YOUR-SUPABASE-ANON-KEY',lk:'wss://YOUR-PROJECT.livekit.cloud'};
 
 /* ---------- seasons (colors only; the owner switches them in Admin > Sessions) ---------- */
 const SEASONS={
@@ -157,7 +163,7 @@ const SEASONS={
 })();
 
 const S={
-  screen:'signin',nav:'main',roomId:null,page:0,owner:false,season:'thanksgiving',adminTab:'reports',
+  screen:'signin',authMode:'in',uid:null,role:'user',nav:'main',roomId:null,page:0,owner:false,season:'thanksgiving',adminTab:'reports',
   user:{name:'',bio:'',major:'',pfp:''},
   cam:true,mic:false,credits:0,streak:0,acc:0,sinceCheck:0,afk:false,check:null,
   pins:[],menuFor:null,modal:null,settings:false,dockOpen:false,speed:1,drawer:null,chatOpen:true,
@@ -170,7 +176,7 @@ const S={
   dbReports:[],ok16:false,samples:[]
 };
 const P={cat:'Exam prep',work:25,brk:5,phase:'focus',left:1500,running:false};
-const SH={cur:null,queue:[]};
+const SH={cur:null,queue:[],mine:false,liveAt:0};
 const ROOMS={
   silent:{id:'silent',name:'Silent Study Hub',off:true,feat:{mic:false,chat:false,share:false},cap:50,desc:'Cameras only. No mics, no chat. Just focus.'},
   hangout:{id:'hangout',name:'Hangout Hub',off:true,feat:{mic:true,chat:true,share:true},cap:50,desc:'Mics, text chat with replies, and fair screen sharing.'}
@@ -197,13 +203,15 @@ const logo=()=>'<div class="logo"><i></i>CoreFocus</div>';
 const gate=inner=>'<div class="center"><div class="gate">'+logo()+inner+'</div></div>';
 function screenHTML(){
   switch(S.screen){
-  case'signin':return gate('<h1 style="font-size:34px">Study with real people.<br>Earn for every focused minute.</h1><p class="muted">Silent rooms, hangout rooms and a reward shop. Sign in with Google to start.</p><button class="btn pri" data-act="signin">Continue with Google</button><p class="note">Preview: this button skips the real Google sign-in.</p>');
-  case'dob':return gate('<h2>One last step</h2><p class="muted">Enter your date of birth to finish your profile. You must be 16 or older. We do not keep your date of birth.</p><div class="field" style="width:100%;text-align:left"><label for="dob">Date of birth</label><input id="dob" type="date" required></div><button class="btn pri" data-act="dob">Continue</button>');
+  case'signin':return authHTML();
   case'locked':return gate('<div class="big">Come back at 16</div><p class="muted">CoreFocus is for people aged 16 and over, so we cannot let you in yet. We did not save your date of birth or any details from this sign-in.</p><p class="muted">You are always welcome once you turn 16.</p><button class="btn" data-act="restart">Back to the start</button>');
   case'timeout':return gate('<div class="big">Penalty box</div><p class="muted">You were put on a timeout for breaking the room rules.<br>Reason: mic abuse (flagged phrase at 12:04:18).</p><div class="mono" style="font-size:44px" id="toLeft">'+fmt(S.timeoutLeft)+'</div><p class="muted">Camera, mic and chat come back when the timer reaches zero.</p>');
   case'ban':return gate('<div class="big">Account terminated</div><p class="muted">Your access was permanently removed for repeated violations of the community guidelines.</p><table><tr><th>Case ID</th><td class="mono">#884920</td></tr><tr><th>Evidence</th><td>Repeated looped-video flags on 3 days, reviewed by an admin.</td></tr></table><p class="muted">This decision is final. Earned Focus Credits were cleared.</p>');
   case'profile':return profileHTML();
   default:return appHTML()}
+}
+function authHTML(){const up=S.authMode==='up';
+  return gate('<h1 style="font-size:34px">Study with real people.<br>Earn for every focused minute.</h1><p class="muted">Silent rooms, hangout rooms and a reward shop.</p><form id="authForm" style="width:100%;text-align:left;display:flex;flex-direction:column;gap:12px"><div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="email" required></div><div class="field"><label for="pw1">Password</label><input id="pw1" type="password" minlength="8" autocomplete="'+(up?'new-password':'current-password')+'" required></div>'+(up?'<div class="field"><label for="dob">Date of birth</label><input id="dob" type="date" required><span class="note">You must be 16 or older. We use it once to check your age and never store it.</span></div>':'')+'<button class="btn pri">'+(up?'Create account':'Sign in')+'</button></form><button class="btn" data-act="authmode">'+(up?'I already have an account':'Create an account')+'</button>');
 }
 function appHTML(){
   const tabs=[['main','Rooms'],['custom','Custom rooms'],['shop','Reward shop']];if(S.owner)tabs.push(['admin','Admin']);
@@ -228,14 +236,14 @@ function customHTML(){
 }
 /* everyone in the room, newest page first; pinned people always lead page 1 */
 function everyone(r){
-  const real=PEERS.map(p=>({n:String(p.presence.n||'Guest').slice(0,24),cam:!!p.presence.cam,mic:!!p.presence.mic,live:true}));
+  const real=PEERS.map(p=>({id:p.id,n:p.n,cam:p.cam,mic:p.mic,live:true}));
   const all=real;
   const pin=all.filter(x=>S.pins.includes(x.n)),rest=all.filter(x=>!S.pins.includes(x.n));
   return pin.concat(rest);
 }
 function tileHTML(x){
   const h=hue(x.n),f=feat();
-  return'<div class="cell"><div class="tile" style="background:linear-gradient(135deg,hsl('+h+' 38% 34%),hsl('+h+' 38% 17%))"><span class="ini">'+esc(x.n[0])+'</span>'+(x.cam?'':'<div class="off">Camera off</div>')+(S.pins.includes(x.n)?'<span class="pinned">Pinned</span>':'')+'<span class="nm">'+(x.live?'<b style="background:var(--ok);color:#fff;border-radius:4px;padding:0 5px;font-size:11px">LIVE</b>':'')+esc(x.n)+(f.mic&&x.mic?' · mic on':'')+'</span></div><button class="dots" data-act="menu" data-arg="'+esc(x.n)+'" aria-label="Options for '+esc(x.n)+'">&#8942;</button>'+(S.menuFor===x.n?menuHTML(x.n):'')+'</div>';
+  return'<div class="cell"><div class="tile" data-pid="'+esc(x.id)+'" style="background:linear-gradient(135deg,hsl('+h+' 38% 34%),hsl('+h+' 38% 17%))"><span class="ini">'+esc(x.n[0])+'</span>'+(x.cam?'':'<div class="off">Camera off</div>')+(S.pins.includes(x.n)?'<span class="pinned">Pinned</span>':'')+'<span class="nm">'+(x.live?'<b style="background:var(--ok);color:#fff;border-radius:4px;padding:0 5px;font-size:11px">LIVE</b>':'')+esc(x.n)+(f.mic&&x.mic?' · mic on':'')+'</span></div><button class="dots" data-act="menu" data-arg="'+esc(x.n)+'" aria-label="Options for '+esc(x.n)+'">&#8942;</button>'+(S.menuFor===x.n?menuHTML(x.n):'')+'</div>';
 }
 function menuHTML(n){
   const f=feat();const rep=[['cam','Camera stream',true],['afk','AFK or cheating',true],['mic','Mic audio',f.mic],['chat','Text chat',f.chat],['share','Screen share',f.share]];
@@ -244,13 +252,13 @@ function menuHTML(n){
 function roomHTML(){
   const r=room(),f=r.feat,all=everyone(r),pages=Math.max(1,Math.ceil((all.length+1)/PER));
   if(S.page>=pages)S.page=pages-1;
-  const start=S.page===0?0:S.page*PER-1,slice=all.slice(start,start+(S.page===0?PER-1:PER));
-  const self='<div class="cell"><div class="tile you" style="background:linear-gradient(135deg,hsl(220 40% 32%),hsl(220 40% 16%))">'+(S.user.pfp?'<img src="'+S.user.pfp+'" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">':'<span class="ini">'+esc(S.user.name[0]||'A')+'</span>')+''+(S.cam?'':'<div class="off">Your camera is off.<br>No credits while it is off.</div>')+'<span class="nm">You'+(f.mic?(S.mic?' · mic on':' · muted'):'')+'</span></div></div>';
+  const start=S.page===0?0:S.page*PER-1,slice=all.slice(start,start+(S.page===0?PER-1:PER));VIS=new Set(slice.map(x=>x.id));
+  const self='<div class="cell"><div class="tile you" data-pid="me" style="background:linear-gradient(135deg,hsl(220 40% 32%),hsl(220 40% 16%))">'+(S.user.pfp&&!S.cam?'<img src="'+S.user.pfp+'" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">':'<span class="ini">'+esc(S.user.name[0]||'A')+'</span>')+''+(S.cam?'':'<div class="off">Your camera is off.<br>No credits while it is off.</div>')+'<span class="nm">You'+(f.mic?(S.mic?' · mic on':' · muted'):'')+'</span></div></div>';
   return'<div class="row spread"><div><h2>'+esc(r.name)+'</h2><span class="cap">'+count(r)+'/'+r.cap+' people</span></div><div class="row"><button class="btn" data-act="cam">'+(S.cam?'Camera off':'Camera on')+'</button>'+(f.mic?'<button class="btn" data-act="mic">'+(S.mic?'Mute':'Unmute')+'</button>':'')+(f.share?'<button class="btn" data-act="share">Share screen</button>':'')+(f.chat?'<button class="btn" data-act="chattog">'+(S.chatOpen?'Hide chat':'Show chat')+'</button>':'')+'<button class="btn" data-act="leave">Leave</button></div></div>'+
-  (f.share?'<div class="bar" id="shareBar">'+shareBarHTML()+'</div>':'')+
+  (f.share?'<div class="bar" id="shareBar">'+shareBarHTML()+'</div><div id="shareStage"></div>':'')+
   '<div class="room '+(f.chat&&S.chatOpen?'haschat':'')+'"><div class="stack" style="display:flex;flex-direction:column;gap:14px"><div class="grid">'+(S.page===0?self:'')+slice.map(tileHTML).join('')+'</div>'+
   '<div class="pager"><button class="btn sm" data-act="page" data-arg="-1"'+(S.page===0?' disabled':'')+'>Previous</button><span class="note">Page '+(S.page+1)+' of '+pages+'</span><button class="btn sm" data-act="page" data-arg="1"'+(S.page>=pages-1?' disabled':'')+'>Next</button></div>'+
-  '<p class="note" style="text-align:center;margin:0">'+(all.length?'Tiles show real people who have this page open.':'You are the only one here right now.')+' Camera video needs a video service.</p></div>'+(f.chat&&S.chatOpen?chatHTML():'')+'</div>';
+  '<p class="note" style="text-align:center;margin:0">'+(all.length?'Tiles show real people who have this page open.':'You are the only one here right now.')+'</p></div>'+(f.chat&&S.chatOpen?chatHTML():'')+'</div>';
 }
 function shareBarHTML(){
   const you=S.cool>0?'<div class="status off" style="margin-top:8px">Share cooldown: '+fmt(S.cool)+' before you can request again.</div>':'';
@@ -297,7 +305,7 @@ function profileHTML(){
 }
 function readPfp(file){
   const fr=new FileReader();
-  fr.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d'),m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,160,160);S.user.pfp=c.toDataURL('image/jpeg',.8);render()};im.onerror=()=>toast('That file is not an image I can read.');im.src=fr.result};
+  fr.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d'),m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,160,160);S.user.pfp=c.toDataURL('image/jpeg',.8);saveProfile();render()};im.onerror=()=>toast('That file is not an image I can read.');im.src=fr.result};
   fr.onerror=()=>toast('Could not read that file.');fr.readAsDataURL(file);
 }
 function settingsHTML(){
@@ -308,12 +316,12 @@ function settingsHTML(){
   '<div class="label">Sound</div><div class="row"><select id="amb">'+[['off','Ambient off'],['rain','Rain'],['white','White noise'],['cafe','Cafe murmur']].map(o=>'<option value="'+o[0]+'"'+(S.ambient===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select><input id="vol" type="range" min="0" max="100" value="'+S.vol+'" aria-label="Volume"></div>'+
   '<div class="label">Devices</div><div class="row"><select id="cd" aria-label="Camera"><option>Built-in camera</option><option>External webcam</option></select><select id="md" aria-label="Microphone"><option>Built-in microphone</option><option>Headset</option></select></div><p class="note">Device lists are examples until a video service is connected.</p>'+
   '<div class="label">Pinned partners</div><p class="muted" style="margin:0">'+(S.pins.length?esc(S.pins.join(', ')):'Use the three dots on a tile to pin up to 4 people.')+'</p>'+
-  '<div class="label">Light or dark</div><select id="theme"><option value="system">Match my device</option><option value="light"'+(S.theme==='light'?' selected':'')+'>Light</option><option value="dark"'+(S.theme==='dark'?' selected':'')+'>Dark</option></select></div></div>';
+  '<div class="label">Account</div><div class="row"><button class="btn" data-act="signout">Sign out</button></div><div class="label">Light or dark</div><select id="theme"><option value="system">Match my device</option><option value="light"'+(S.theme==='light'?' selected':'')+'>Light</option><option value="dark"'+(S.theme==='dark'?' selected':'')+'>Dark</option></select></div></div>';
 }
 function modalHTML(){
   const m=S.modal;if(!m)return'';
   if(m.t==='report')return'<div class="scrim"><div class="modal"><h2>Report '+esc(m.who)+'</h2><p style="margin:0">Reason: <b>'+esc(m.why)+'</b> in '+esc(room().name)+'.</p><p class="muted" style="margin:0">The AI checks the saved evidence and the room settings at that moment before anything happens. A false report does nothing to the other person.</p><div class="row"><button class="btn pri" data-act="sendreport">Send report</button><button class="btn" data-act="closemodal">Cancel</button></div></div></div>';
-  if(m.t==='result')return'<div class="scrim"><div class="modal"><h2>Report checked</h2><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px"><li>Evidence saved: '+esc(m.ev)+'</li><li>Room settings at that time: '+esc(m.rules)+'</li><li><b>'+esc(m.verdict)+'</b></li></ol><p class="note" style="margin:0">Simulated outcome. Real checks come with the moderation service.</p><button class="btn pri" data-act="closemodal">Close</button></div></div>';
+  if(m.t==='result')return'<div class="scrim"><div class="modal"><h2>Report checked</h2><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px"><li>Evidence saved: '+esc(m.ev)+'</li><li>Room settings at that time: '+esc(m.rules)+'</li><li><b>'+esc(m.verdict)+'</b></li></ol><p class="note" style="margin:0">Saved to the reports table for admin review.</p><button class="btn pri" data-act="closemodal">Close</button></div></div>';
   if(m.t==='new')return'<div class="scrim"><form class="modal" id="roomForm"><h2>Create a custom room</h2><div class="field"><label for="rt">Room title</label><input id="rt" required maxlength="30" placeholder="Calculus night session" value="'+esc(m.title||'')+'"></div><div class="sw"><span>Mic</span><input id="rm" type="checkbox"'+(m.mic?' checked':'')+'></div><div class="sw"><span>Text chat</span><input id="rc" type="checkbox"'+(m.chat?' checked':'')+'></div><div class="sw"><span>Screen share queue</span><input id="rs" type="checkbox"'+(m.share?' checked':'')+'></div><div class="field"><label for="rl">Max people: <b id="rlv">'+(m.cap||20)+'</b></label><input id="rl" type="range" min="2" max="50" value="'+(m.cap||20)+'"></div><div class="field"><label for="rp">Presets</label><div class="row"><select id="rp"><option value="">Choose a preset</option>'+S.presets.map((p,i)=>'<option value="'+i+'">'+esc(p.n)+'</option>').join('')+'</select><button type="button" class="btn sm" data-act="savepreset">Save these as a preset</button></div></div><div class="row"><button class="btn pri">Create room</button><button type="button" class="btn" data-act="closemodal">Cancel</button></div></form></div>';
   return'';
 }
@@ -321,13 +329,13 @@ function checkHTML(){return S.check?'<div class="scrim"><div class="modal"><h2>K
 function dockHTML(){
   if(!S.owner)return'';
   const b=(a,l,g)=>'<button class="btn sm" data-act="'+a+'"'+(g!==undefined?' data-arg="'+g+'"':'')+'>'+l+'</button>';
-  return'<div class="dock">'+(S.dockOpen?'<div class="dockp"><div class="label">Preview screens (owner only)</div>'+b('jump','Sign-in screen','signin')+b('jump','Date of birth screen','dob')+b('jump','Profile setup screen','profile')+b('jump','Under-16 screen','locked')+b('jump','Timeout screen','timeout')+b('jump','Permanent ban screen','ban')+b('jump','Back to the app','app')+'</div>':'')+'<button class="btn sm" data-act="dock" aria-expanded="'+S.dockOpen+'">'+(S.dockOpen?'Close preview screens':'Preview screens')+'</button></div>';
+  return'<div class="dock">'+(S.dockOpen?'<div class="dockp"><div class="label">Preview screens (owner only)</div>'+b('jump','Sign-in screen','signin')+b('jump','Profile setup screen','profile')+b('jump','Under-16 screen','locked')+b('jump','Timeout screen','timeout')+b('jump','Permanent ban screen','ban')+b('jump','Back to the app','app')+'</div>':'')+'<button class="btn sm" data-act="dock" aria-expanded="'+S.dockOpen+'">'+(S.dockOpen?'Close preview screens':'Preview screens')+'</button></div>';
 }
 
 /* ---------- render ---------- */
 function render(){
   const sx=window.scrollX,sy=window.scrollY;
-  $('#root').innerHTML=screenHTML()+dockHTML();save();
+  $('#root').innerHTML=screenHTML()+dockHTML();save();attachMedia();
   window.scrollTo(sx,sy);
   const th=document.documentElement;
   if(S.theme==='system')th.removeAttribute('data-theme');else th.setAttribute('data-theme',S.theme);
@@ -337,14 +345,23 @@ const rr=(id,fn)=>{const e=document.getElementById(id);if(e)e.innerHTML=fn()};
 
 /* ---------- actions ---------- */
 const A={
-  signin(){S.screen='dob';render()},
-  dob(){const v=$('#dob').value;if(!v){toast('Enter your date of birth to continue.');return}const d=new Date(v+'T00:00:00');if(d>new Date()||d.getFullYear()<1900){toast('That date does not look right. Check it and try again.');return}
-    if(yearsLeftFor(d)>0){S.screen='locked'}else{S.ok16=true;S.screen=S.user.name?'app':'profile'}render()},
-  profilego(){if(!S.user.name.trim()){toast('Enter a display name to continue.');return}S.screen='app';render()},
-  pfpdel(){S.user.pfp='';render()},
+  authmode(){S.authMode=S.authMode==='up'?'in':'up';render()},
+  async auth(){const em=$('#em').value.trim(),pw=$('#pw1').value,up=S.authMode==='up';
+    if(!sb){toast('Add your Supabase keys at the top of the script first.');return}
+    if(up){/* underage lockdown: checked before anything is sent to Supabase, DOB is never stored */
+      const v=$('#dob').value,d=new Date(v+'T00:00:00');
+      if(!v||d>new Date()||d.getFullYear()<1900){toast('That date does not look right. Check it and try again.');return}
+      if(yearsLeftFor(d)>0){S.screen='locked';render();return}}
+    const r=up?await sb.auth.signUp({email:em,password:pw,options:{data:{ok16:true}}}):await sb.auth.signInWithPassword({email:em,password:pw});
+    if(r.error){toast(esc(r.error.message));return}
+    if(!r.data.session){toast('Check your email to confirm your account, then sign in.');S.authMode='in';render();return}
+    await enter(r.data.user)},
+  signout(){S.settings=false;if(sb)sb.auth.signOut()},
+  profilego(){if(!S.user.name.trim()){toast('Enter a display name to continue.');return}S.screen='app';saveProfile();render()},
+  pfpdel(){S.user.pfp='';saveProfile();render()},
   restart(){S.screen='signin';render()},
   jump(a){if(a==='timeout')S.timeoutLeft=600;S.screen=a;render()},
-  nav(a){S.nav=a;S.menuFor=null;if(a!=='shop'&&a!=='admin'&&S.roomId&&!((a==='main'&&room().off)||(a==='custom'&&!room().off)))leave(true);render()},
+  nav(a){S.nav=a;S.menuFor=null;if(a==='admin'&&S.owner)loadReports().then(()=>render());if(a!=='shop'&&a!=='admin'&&S.roomId&&!((a==='main'&&room().off)||(a==='custom'&&!room().off)))leave(true);render()},
   join(a){if(S.roomId&&S.roomId!==a)leave(true);S.roomId=a;S.page=0;S.nav=ROOMS[a].off?'main':'custom';S.menuFor=null;toast('Joined '+esc(ROOMS[a].name));render();joinLive(a)},
   leave(){leave();render()},
   cam(){S.cam=!S.cam;syncPresence();render()},mic(){S.mic=!S.mic;syncPresence();render()},
@@ -354,11 +371,11 @@ const A={
   menu(a){S.menuFor=S.menuFor===a?null:a;render()},
   msgto(a){S.menuFor=null;if(!S.dms[a])S.dms[a]=[];S.dmWith=a;S.drawer='dm';render()},
   report(a){const i=a.lastIndexOf('|');S.menuFor=null;S.modal={t:'report',who:a.slice(0,i),why:a.slice(i+1)};render()},
-  sendreport(){const m=S.modal,r=room(),f=r.feat;const bad=Math.random()<.5;const rules='Mic '+(f.mic?'ON':'OFF')+', Chat '+(f.chat?'ON':'OFF')+', Share '+(f.share?'ON':'OFF');
+  async sendreport(){const m=S.modal,r=room(),f=r.feat;const rules='Mic '+(f.mic?'ON':'OFF')+', Chat '+(f.chat?'ON':'OFF')+', Share '+(f.share?'ON':'OFF');
     const ev=m.why==='Mic audio'?'30-second audio clip':m.why==='Text chat'?'last 5 minutes of chat':'camera frames and focus signals';
-    const verdict=bad?'Violation confirmed. 10-minute timeout applied and sent to the owner for review.':'No violation found. Report dismissed and no action taken.';
-    S.modal={t:'result',ev,rules,verdict};
-    if(bad)S.dbReports.unshift({id:'r'+Date.now(),who:m.who,by:'You',room:r.name,why:m.why,log:'Evidence: '+ev+' (preview)',rule:rules,st:'Timeout 10 min applied by AI'});
+    const pr=PEERS.find(p=>p.n===m.who);
+    const {error}=await sb.from('reports').insert({reporter_id:S.uid,reporter_name:S.user.name,reported_id:pr?pr.id:null,reported_name:m.who,room_name:r.name,reason:m.why,rules,log:'Evidence: '+ev,bot_action:'Pending review'});
+    if(error){toast('Could not send the report.');S.modal=null}else S.modal={t:'result',ev,rules,verdict:'Report saved. An admin will review it.'};
     render()},
   closemodal(){S.modal=null;render()},
   newroom(){S.modal={t:'new'};render()},
@@ -368,15 +385,16 @@ const A={
   task(a){S.tasks[a].d=!S.tasks[a].d;render()},
   reply(a){S.replyTo=a==='x'?null:+a;render();const i=$('#chatIn');if(i)i.focus()},
   share(){
+    if(!lk){toast('Join a room first.');return}
     if(S.cool>0){toast('Wait '+fmt(S.cool)+' before requesting a screen share again.');return}
-    if(!SH.cur){SH.cur={who:'You',left:900};toast('You are sharing for 15 minutes.')}
-    else if(SH.cur.who==='You'){toast('You are already sharing.');return}
-    else if(SH.queue.includes('You')){toast('You are already in line.');return}
-    else{SH.queue.push('You');if(SH.cur.left>120)SH.cur.left=120;toast(esc(SH.cur.who)+' was told they have '+fmt(SH.cur.left)+' left. You go live after.')}
-    rr('shareBar',shareBarHTML)},
-  stopshare(){if(SH.cur&&SH.cur.who==='You'){S.cool=300;nextShare()}render()},
-  cancelq(){SH.queue=SH.queue.filter(x=>x!=='You');S.cool=300;toast('You left the line. 5 minute cooldown started.');rr('shareBar',shareBarHTML)},
-  redeem(a){const i=SHOP[a];if(S.credits<i.p)return;S.credits-=i.p;if(S.goal===+a)S.goal=null;toast('Unlocked: '+esc(i.n));render()},
+    syncShare();
+    if(SH.cur&&SH.cur.who==='You'){toast('You are already sharing.');return}
+    if(SH.queue.includes('You')){toast('You are already in line.');return}
+    setMeta({q:Date.now()});
+    toast(SH.cur?esc(SH.cur.who)+' was told they have '+fmt(Math.min(SH.cur.left,120))+' left. You go live after.':'Starting your share...')},
+  stopshare(){if(SH.mine)endShare(false)},
+  cancelq(){setMeta({});S.cool=300;toast('You left the line. 5 minute cooldown started.')},
+  redeem(a){const i=SHOP[a];if(S.credits<i.p)return;S.credits-=i.p;ledger(-i.p,'redeem: '+i.n);if(S.goal===+a)S.goal=null;toast('Unlocked: '+esc(i.n));render()},
   goal(a){S.goal=S.goal===+a?null:+a;S.goalHit=false;render()},
   settings(){S.settings=true;render()},
   closeset(){S.settings=false;render()},
@@ -386,14 +404,11 @@ const A={
   dock(){S.dockOpen=!S.dockOpen;render()},
   stillhere(){S.check=null;S.afk=false;S.sinceCheck=0;render()},
   admtab(a){S.adminTab=a;render()},
-  adm(a){const i=a.lastIndexOf('|'),id=a.slice(0,i),d=a.slice(i+1);const r=S.dbReports.find(x=>x.id===id)||S.samples.find(x=>x.id===id);if(!r)return;r.done=d;
+  adm(a){const i=a.lastIndexOf('|'),id=a.slice(0,i),d=a.slice(i+1);const r=S.dbReports.find(x=>x.id===id)||S.samples.find(x=>x.id===id);if(!r)return;r.done=d;if(sb){sb.from('reports').update({decision:d}).eq('id',id).then(()=>{});if(d==='Permanent ban'&&r.uid)sb.from('profiles').update({role:'banned'}).eq('id',r.uid).then(()=>{})}
     render()},
-  season(a){if(!S.owner||!SEASONS[a])return;S.season=a;
-    if(DB)DB.doc('site/season').set({id:a,at:Date.now()}).then(()=>toast(SEASONS[a].name+' is live for everyone.')).catch(()=>toast('Applied here only. Could not save for everyone.'));
-    else toast(SEASONS[a].name+' applied on this device.');render()}
+  season(a){if(!S.owner||!SEASONS[a])return;S.season=a;toast(SEASONS[a].name+' applied on this device.');render()}
 };
-function leave(quiet){const r=room();if(!r)return;if(r.id==='mine'){delete ROOMS.mine;if(!quiet)toast('Your empty room was closed.')}S.roomId=null;S.menuFor=null;S.page=0;leaveLive()}
-function nextShare(){if(SH.queue.length){const n=SH.queue.shift();SH.cur={who:n,left:900};if(n==='You')toast('You are live. 15 minutes.')}else SH.cur=null}
+function leave(quiet){const r=room();if(!r)return;if(!r.off&&r.hostId===S.uid&&PEERS.length===0){sb.from('rooms').delete().eq('id',r.id).then(()=>{});delete ROOMS[r.id];if(!quiet)toast('Your empty room was closed.')}S.roomId=null;S.menuFor=null;S.page=0;leaveLive()}
 
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');
@@ -404,6 +419,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='pfpIn'&&t.files&&t.files[0])readPfp(t.files[0]);
+  if(t.dataset&&t.dataset.bind)saveProfile();
   if(t.id==='amb'){S.ambient=t.value;setAmbient()}
   if(t.id==='pcat')P.cat=t.value;
   if(t.id==='pw'){P.work=Math.max(5,Math.min(90,+t.value||25));if(!P.running&&P.phase==='focus'){P.left=P.work*60}}
@@ -413,19 +429,21 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('input',e=>{
   const t=e.target;
-  if(t.dataset&&t.dataset.bind){S.user[t.dataset.bind]=t.value;syncPresence()}
+  if(t.dataset&&t.dataset.bind){S.user[t.dataset.bind]=t.value}
   if(t.id==='vol'){S.vol=+t.value;if(noise)noise.g.gain.value=S.vol/400}
   if(t.id==='rl'){$('#rlv').textContent=t.value}
 });
 document.addEventListener('submit',e=>{
   e.preventDefault();const id=e.target.id;
+  if(id==='authForm'){A.auth();return}
   if(id==='chatForm'){const v=$('#chatIn').value.trim();if(!v)return;
-    if(LIVE){const r=S.replyTo!==null&&S.chat[S.replyTo]?S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):'';S.replyTo=null;LIVE.emit('chat',{n:String(S.user.name||'Guest').slice(0,24),t:v.slice(0,300),r}).catch(()=>toast('Message not sent. Try again.'));$('#chatIn').value='';return}
+    if(lk){const rp=S.replyTo!==null&&S.chat[S.replyTo]?'Replying to '+S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):'';lk.localParticipant.publishData(new TextEncoder().encode(JSON.stringify({n:String(S.user.name||'Guest').slice(0,24),t:v.slice(0,300),r:rp})),{reliable:true,topic:'chat'}).catch(()=>toast('Message not sent. Try again.'))}
     S.chat.push({who:'You',t:v,rep:S.replyTo!==null&&S.chat[S.replyTo]?'Replying to '+S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):''});S.replyTo=null;render();$('#chatIn').focus()}
   if(id==='taskForm'){const v=$('#taskIn').value.trim();if(!v)return;S.tasks.push({t:v,d:false});render();$('#taskIn').focus()}
   if(id==='dmForm'){const v=$('#dmIn').value.trim();if(!v)return;S.dms[S.dmWith].push({me:true,t:v});render();$('#dmIn').focus()}
   if(id==='roomForm'){const g=x=>document.getElementById(x);const title=g('rt').value.trim();if(!title)return;
-    ROOMS.mine={id:'mine',name:title,feat:{mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked},cap:+g('rl').value,count:0,host:'You'};S.modal=null;A.join('mine')}
+    sb.from('rooms').insert({name:title,mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked,cap:+g('rl').value,official:false,host_id:S.uid,host_name:S.user.name}).select().single().then(({data,error})=>{if(error||!data){toast('Could not create the room.');return}
+      ROOMS[data.id]={id:data.id,name:data.name,feat:{mic:data.mic,chat:data.chat,share:data.share},cap:data.cap,host:'You',hostId:S.uid};S.modal=null;A.join(data.id)})}
 });
 document.addEventListener('visibilitychange',()=>{if(S.screen==='app'){rr('pomoWhy',whyNot);const w=$('#pomoWhy');if(w)w.className='status '+(earning()?'on':'off')}});
 
@@ -433,10 +451,10 @@ setInterval(()=>{
   const dt=S.speed;
   if(S.screen==='timeout'){S.timeoutLeft-=dt;if(S.timeoutLeft<=0){S.screen='app';render()}else{const e=$('#toLeft');if(e)e.textContent=fmt(S.timeoutLeft)}return}
   if(S.cool>0)S.cool=Math.max(0,S.cool-dt);
-  if(SH.cur){SH.cur.left-=dt;if(SH.cur.left<=0){if(SH.cur.who==='You')S.cool=300;nextShare();if(S.screen==='app')render()}}
+  if(lk){syncShare();myTurn()}
   if(P.running){P.left-=dt;if(P.left<=0){P.phase=P.phase==='focus'?'break':'focus';P.left=(P.phase==='focus'?P.work:P.brk)*60;toast(P.phase==='focus'?'Break over. Back to focus.':'Focus block done. Take a break.');if(S.screen==='app')render()}}
   if(earning()){S.acc+=dt;S.sinceCheck+=dt;
-    while(S.acc>=60){S.acc-=60;S.credits+=1}
+    while(S.acc>=60){S.acc-=60;S.credits+=1;ledger(1,'focus')}
     if(S.sinceCheck>=2400&&!S.check){S.check={left:60};render()}}
   if(S.check){S.check.left-=dt;const c=$('#chkLeft');if(c)c.textContent=fmt(S.check.left);if(S.check.left<=0){S.check=null;S.afk=true;toast('Credits paused. Tap "I am back" to resume.');render()}}
   if(S.goal!==null&&!S.goalHit&&S.credits>=SHOP[S.goal].p){S.goalHit=true;if(S.goalChime)chime();toast('You can afford: '+esc(SHOP[S.goal].n))}
@@ -449,33 +467,97 @@ setInterval(()=>{
 },1000);
 
 /* ---------- saved on this device (no birthdate is ever kept) ---------- */
-const KEYS=['user','credits','streak','tasks','pins','presets','dnd','goalChime','theme','vol','goal','ok16','season'];
+const KEYS=['streak','tasks','pins','presets','dnd','goalChime','theme','vol','goal','season'];
 function save(){try{const o={};KEYS.forEach(k=>o[k]=S[k]);localStorage.setItem('corefocus3',JSON.stringify(o))}catch(e){}}
-try{const o=JSON.parse(localStorage.getItem('corefocus3')||'null');if(o){KEYS.forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});if(!SEASONS[S.season])S.season='thanksgiving';if(S.ok16)S.screen=S.user.name?'app':'profile'}}catch(e){}
+try{const o=JSON.parse(localStorage.getItem('corefocus3')||'null');if(o){KEYS.forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});if(!SEASONS[S.season])S.season='thanksgiving';}}catch(e){}
 
-/* ---------- live rooms: real people who have this page open ---------- */
-let LIVE=null,liveUn=[],PEERS=[],DB=null;
-function syncPresence(){if(LIVE)LIVE.presence({n:String(S.user.name||'Guest').slice(0,24),cam:!!S.cam,mic:!!S.mic}).catch(()=>{})}
-function leaveLive(){liveUn.forEach(f=>f());liveUn=[];if(LIVE){LIVE.leave().catch(()=>{});LIVE=null}PEERS=[]}
-async function joinLive(id){
-  leaveLive();
-  try{
-    const room=await claude.use('room');if(!room)return;
-    const nr=await room.join('cf-'+id);if(S.roomId!==id){nr.leave();return}
-    LIVE=nr;syncPresence();
-    liveUn.push(nr.onPeers(ch=>{PEERS=ch.peers.filter(p=>!p.isMe&&p.kind==='viewer');if(S.roomId===id&&!S.modal&&!S.menuFor)render()}));
-    liveUn.push(nr.on('chat',m=>{const d=m.data||{};if(typeof d.t!=='string')return;
-      S.chat.push({who:m.isMe?'You':String(d.n||'Guest').slice(0,24),t:d.t.slice(0,300),rep:typeof d.r==='string'?d.r.slice(0,90):''});
-      if(S.screen==='app'&&S.roomId===id){const a=document.activeElement,keep=a&&a.id==='chatIn'?a.value:null;render();if(keep!==null){const i=$('#chatIn');if(i){i.value=keep;i.focus()}}}}));
-  }catch(e){}
+/* ---------- Supabase (auth + data) and LiveKit (video) ---------- */
+const LK=window.LivekitClient;let lk=null,PEERS=[],VIS=new Set(),VID={},sb=null;
+function softRender(){if(S.screen!=='app'||S.modal||S.menuFor)return;const a=document.activeElement,keep=a&&a.id==='chatIn'?a.value:null;render();if(keep!==null){const i=$('#chatIn');if(i){i.value=keep;i.focus()}}}
+function ledger(d,why){if(sb&&S.uid)sb.from('credit_ledger').insert({user_id:S.uid,delta:d,reason:why}).then(r=>{if(r.error)console.warn(r.error.message)})}
+function saveProfile(){if(sb&&S.uid)sb.from('profiles').update({name:S.user.name,bio:S.user.bio,major:S.user.major,avatar:S.user.pfp}).eq('id',S.uid).then(r=>{if(r.error)toast('Could not save your profile.')});syncPresence()}
+async function loadRooms(){const {data}=await sb.from('rooms').select('*').eq('official',false).order('created_at');
+  Object.keys(ROOMS).forEach(k=>{if(!ROOMS[k].off)delete ROOMS[k]});
+  (data||[]).forEach(r=>{ROOMS[r.id]={id:r.id,name:r.name,feat:{mic:!!r.mic,chat:!!r.chat,share:!!r.share},cap:r.cap||20,host:r.host_name||'Member',hostId:r.host_id}})}
+async function loadReports(){const {data}=await sb.from('reports').select('*').order('created_at',{ascending:false}).limit(100);
+  S.dbReports=(data||[]).map(r=>({id:String(r.id),uid:r.reported_id,who:r.reported_name,by:r.reporter_name||'member',room:r.room_name,why:r.reason,rule:r.rules,log:r.log,st:r.bot_action||'Pending review',done:r.decision||''}))}
+async function enter(u){
+  S.uid=u.id;
+  let {data:p}=await sb.from('profiles').select('*').eq('id',u.id).maybeSingle();
+  if(!p){const r=await sb.from('profiles').insert({id:u.id}).select().single();p=r.data||{}}
+  if(p.role==='banned'){S.screen='ban';render();return}
+  S.role=p.role||'user';S.owner=S.role==='admin'||S.role==='owner';S.ok16=true;
+  S.user={name:p.name||'',bio:p.bio||'',major:p.major||'',pfp:p.avatar||''};
+  const cr=await sb.from('credit_ledger').select('delta').eq('user_id',u.id);
+  S.credits=(cr.data||[]).reduce((a,r)=>a+Number(r.delta),0);
+  await Promise.all([loadRooms(),S.owner?loadReports():0]);
+  sb.channel('rooms-feed').on('postgres_changes',{event:'*',schema:'public',table:'rooms'},()=>loadRooms().then(()=>{if(S.screen==='app'&&S.nav==='custom'&&!S.roomId)softRender()})).subscribe();
+  S.nav='main';S.screen=S.user.name?'app':'profile';render()}
+function syncPresence(){if(!lk)return;const lp=lk.localParticipant;
+  lp.setCameraEnabled(!!S.cam).catch(()=>{if(S.cam){S.cam=false;toast('Camera is blocked. Allow it in your browser to earn credits.');render()}});
+  lp.setMicrophoneEnabled(!!(S.mic&&feat().mic)).catch(()=>{if(S.mic){S.mic=false;toast('Mic is blocked.');render()}});
+  const n=String(S.user.name||'Guest').slice(0,24);if(lp.name!==n)lp.setName(n)}
+function refreshPeers(){if(!lk)return;const Src=LK.Track.Source;
+  PEERS=[...lk.remoteParticipants.values()].map(p=>{const c=p.getTrackPublication(Src.Camera),m=p.getTrackPublication(Src.Microphone);return{id:p.identity,n:String(p.name||'Guest').slice(0,24),cam:!!(c&&!c.isMuted),mic:!!(m&&!m.isMuted)}});
+  softRender()}
+function leaveLive(){if(lk){lk.disconnect();lk=null}PEERS=[];VID={};VIS=new Set();const a=$('#audioBox');if(a)a.innerHTML='';SH.cur=null;SH.queue=[];SH.mine=false;SH.liveAt=0}
+/* screen share queue: each person's request lives in their own LiveKit participant metadata {q:requestedAt,live:startedAt}.
+   Everyone sorts the same list, so every client agrees on who is live and who is next. */
+function setMeta(o){if(lk)lk.localParticipant.setMetadata(JSON.stringify(o)).catch(()=>toast('Could not update the share queue.'))}
+function syncShare(){if(!lk){SH.cur=null;SH.queue=[];return}
+  const me=lk.localParticipant,now=Date.now();
+  const L=[me,...lk.remoteParticipants.values()].map(p=>{let m={};try{m=JSON.parse(p.metadata||'{}')}catch(e){}return{id:p.identity,name:p===me?'You':String(p.name||'Guest'),q:+m.q||0,live:+m.live||0}}).filter(x=>x.q).sort((a,b)=>a.q-b.q||(a.id<b.id?-1:1));
+  if(!L.length){SH.cur=null;SH.queue=[];return}
+  const c=L[0],rest=L.slice(1),base=c.live||(c.id===S.uid?SH.liveAt:0)||now;
+  let end=base+900000;if(rest.length)end=Math.min(end,Math.max(base,rest[0].q)+120000);
+  SH.cur={who:c.name,id:c.id,left:Math.max(0,(end-now)/1000)};SH.queue=rest.map(x=>x.name)}
+function myTurn(){const c=SH.cur;if(!c||c.id!==S.uid)return;
+  if(!SH.mine){SH.mine=true;SH.liveAt=Date.now();let m={};try{m=JSON.parse(lk.localParticipant.metadata||'{}')}catch(e){}
+    setMeta({q:m.q||SH.liveAt,live:SH.liveAt});
+    lk.localParticipant.setScreenShareEnabled(true).then(()=>toast('You are live. 15 minutes.')).catch(()=>{toast('Screen share was cancelled.');endShare(false)})}
+  else if(c.left<=0)endShare(true)}
+function endShare(auto){SH.mine=false;SH.liveAt=0;S.cool=300;if(lk){lk.localParticipant.setScreenShareEnabled(false).catch(()=>{});setMeta({})}if(auto)toast('Your 15 minutes are up.');render()}
+/* video: only the people on the current page stay subscribed, so big rooms stay light */
+function attachMedia(){
+  if(!lk||!S.roomId)return;const Src=LK.Track.Source;
+  lk.remoteParticipants.forEach(p=>{const pub=p.getTrackPublication(Src.Camera),want=VIS.has(p.identity);if(pub&&pub.isSubscribed!==want)pub.setSubscribed(want)});
+  const put=(key,pub,host,first)=>{let v=VID[key];const tr=pub&&pub.track;
+    if(tr&&!pub.isMuted){if(!v||v.dataset.sid!==pub.trackSid){if(v)v.remove();v=tr.attach();v.dataset.sid=pub.trackSid;v.muted=true;if(key==='me')v.style.transform='scaleX(-1)';VID[key]=v}
+      if(v.parentNode!==host)first?host.insertBefore(v,host.firstChild):host.appendChild(v)}
+    else if(v&&v.parentNode===host)v.remove()};
+  document.querySelectorAll('.tile[data-pid]').forEach(t=>{const id=t.dataset.pid,p=id==='me'?lk.localParticipant:lk.remoteParticipants.get(id);if(p)put(id,p.getTrackPublication(Src.Camera),t,1)});
+  const st=document.getElementById('shareStage');
+  if(st){syncShare();const c=SH.cur,p=c&&(c.id===S.uid?lk.localParticipant:lk.remoteParticipants.get(c.id));
+    if(p)put('stage',p.getTrackPublication(Src.ScreenShare),st);else if(VID.stage){VID.stage.remove();delete VID.stage}}
 }
-/* owner check and shared settings: only the owner sees Admin; the chosen season reaches everyone */
-(async function initCaps(){
-  try{const u=await claude.use('user');if(u){S.owner=await u.isOwner();if(S.owner)render()}}catch(e){}
-  try{DB=await claude.use('db')}catch(e){}
-  if(DB){
-    try{DB.doc('site/season').onSnapshot(snap=>{if(snap.exists){const d=snap.data()||{};if(SEASONS[d.id]&&d.id!==S.season){S.season=d.id;render()}}},()=>{})}catch(e){}
-  }
+async function joinLive(id){
+  leaveLive();S.chat=[];
+  try{
+    if(!sb||!LK)throw new Error('missing libs');
+    const {data,error}=await sb.functions.invoke('livekit-token',{body:{room:'cf-'+id}});
+    if(error||!data||!data.token)throw error||new Error('no token');
+    if(S.roomId!==id)return;
+    const r=new LK.Room({adaptiveStream:true,dynacast:true}),E=LK.RoomEvent;lk=r;
+    [E.ParticipantConnected,E.ParticipantDisconnected,E.TrackPublished,E.TrackUnpublished,E.TrackMuted,E.TrackUnmuted,E.ParticipantNameChanged].forEach(ev=>r.on(ev,refreshPeers));
+    r.on(E.TrackSubscribed,t=>{if(t.kind==='audio')$('#audioBox').appendChild(t.attach());refreshPeers()});
+    r.on(E.TrackUnsubscribed,t=>{t.detach().forEach(e=>e.remove());Object.keys(VID).forEach(k=>{if(VID[k].dataset.sid===t.sid)delete VID[k]});refreshPeers()});
+    r.on(E.LocalTrackPublished,()=>softRender());
+    r.on(E.LocalTrackUnpublished,pub=>{if(SH.mine&&pub.source===LK.Track.Source.ScreenShare)endShare(false);else softRender()});
+    r.on(E.ParticipantMetadataChanged,()=>{syncShare();rr('shareBar',shareBarHTML);attachMedia()});
+    r.on(E.DataReceived,(buf,p,kind,topic)=>{if(topic!=='chat')return;let d;try{d=JSON.parse(new TextDecoder().decode(buf))}catch(e){return}
+      if(!d||typeof d.t!=='string')return;S.chat.push({who:String((p&&p.name)||d.n||'Guest').slice(0,24),t:d.t.slice(0,300),rep:typeof d.r==='string'?d.r.slice(0,90):''});softRender()});
+    r.on(E.Disconnected,()=>{if(lk===r){lk=null;PEERS=[];toast('Disconnected from the room.')}});
+    await r.connect(CFG.lk,data.token);
+    if(S.roomId!==id){r.disconnect();if(lk===r)lk=null;return}
+    syncPresence();refreshPeers();
+  }catch(e){lk=null;toast('Could not start live video. Check your LiveKit setup.')}
+}
+(async function boot(){
+  if(!window.supabase||CFG.url.includes('YOUR-')){toast('Add your Supabase and LiveKit keys at the top of the script.');return}
+  sb=window.supabase.createClient(CFG.url,CFG.key);
+  sb.auth.onAuthStateChange(ev=>{if(ev==='SIGNED_OUT'){leaveLive();S.roomId=null;S.uid=null;S.owner=false;S.credits=0;S.user={name:'',bio:'',major:'',pfp:''};S.screen='signin';render()}});
+  const {data}=await sb.auth.getSession();
+  if(data.session)await enter(data.session.user);
 })();
 render();
 })();
