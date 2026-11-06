@@ -1,0 +1,484 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>CoreFocus</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one calm column. Top bar, a slim focus bar (timer + tasks), then the page. Seasons only swap color tokens. */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --surface2:#F4F6F9; --ink:#101722; --muted:#566175; --line:#D7DDE6;
+  --accent:#2D5BFF; --accent-ink:#FFFFFF; --credit:#A86200; --ok:#17814F; --bad:#C23A3A; --pat:none;
+  --font-display:'Bricolage Grotesque','DM Sans',system-ui,sans-serif;
+  --font-body:'DM Sans',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0B1017; --surface:#131A24; --surface2:#19222F; --ink:#E8EDF5; --muted:#8E9BB0; --line:#263141;
+  --accent:#7D9CFF; --accent-ink:#0B1017; --credit:#F0B24B; --ok:#4CC38A; --bad:#FF8080; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1017; --surface:#131A24; --surface2:#19222F; --ink:#E8EDF5; --muted:#8E9BB0; --line:#263141;
+  --accent:#7D9CFF; --accent-ink:#0B1017; --credit:#F0B24B; --ok:#4CC38A; --bad:#FF8080; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);background-image:var(--pat);background-size:24px 24px;color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.5;
+  padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:14px 96px}
+h1,h2,h3{font-family:var(--font-display);margin:0;line-height:1.15;text-wrap:balance}
+h2{font-size:24px}h3{font-size:17px}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink);background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;min-width:0;max-width:100%}
+input[type=range],input[type=checkbox]{padding:0}
+input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.bad{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.sm{padding:5px 10px;font-size:13px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.wrap{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.logo{font-family:var(--font-display);font-weight:700;font-size:21px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.logo i{width:18px;height:18px;border-radius:50%;border:5px solid var(--accent);display:inline-block;position:relative}
+.logo i:after{content:"";position:absolute;inset:2px;background:var(--accent);border-radius:50%}
+.top{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.tabs{display:flex;gap:4px;flex:1;min-width:0;flex-wrap:wrap}
+.tab{background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px;font-weight:500;color:var(--muted)}
+.tab[aria-current=true]{color:var(--ink);border-color:var(--accent)}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.chip.cr{color:var(--credit)}
+.av img{width:100%;height:100%;object-fit:cover}
+.av{overflow:hidden;padding:0;width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;border:0}
+.season{border-radius:10px;padding:8px 14px;background:color-mix(in srgb,var(--accent) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));font-size:14px}
+.focus{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.focus .t{font-size:26px;font-weight:500}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;min-width:0}
+.label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.cap{font-family:var(--font-mono);font-size:13px;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font-size:12px;border-radius:6px;padding:2px 8px;background:var(--surface2);border:1px solid var(--line)}
+.tag.yes{color:var(--ok)}.tag.no{color:var(--muted);text-decoration:line-through}
+.note{font-size:13px;color:var(--muted)}
+.status{font-size:13px;border-radius:8px;padding:6px 10px;background:var(--surface2)}
+.status.on{color:var(--ok)}.status.off{color:var(--credit)}
+.bar{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px}
+/* room */
+.room{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media(min-width:1000px){.room.haschat{grid-template-columns:minmax(0,1fr) 290px}}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.cell{position:relative;min-width:0}
+.tile{position:relative;aspect-ratio:4/3;border-radius:12px;overflow:hidden;color:#fff;display:grid;place-items:center}
+.tile .ini{font-family:var(--font-display);font-size:34px;font-weight:700;opacity:.85}
+.tile .nm{position:absolute;left:10px;bottom:8px;right:10px;font-size:13px;font-weight:500;text-shadow:0 1px 3px #0009;display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile.you{outline:2px solid var(--accent);outline-offset:-2px}
+.tile .off{position:absolute;inset:0;display:grid;place-items:center;background:#111b;font-size:13px;text-align:center;padding:10px}
+.pinned{position:absolute;left:8px;top:8px;background:#0007;color:#fff;border-radius:6px;padding:1px 7px;font-size:11px}
+.dots{position:absolute;right:6px;top:6px;background:#0007;border:0;color:#fff;border-radius:8px;width:30px;height:30px;font-size:18px;line-height:1}
+.dots:hover{background:#000a}
+.menu{position:absolute;right:6px;top:40px;z-index:20;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:6px;width:210px;box-shadow:0 10px 30px #0004}
+.menu button{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px;border-radius:8px}
+.menu button:hover:not([disabled]){background:var(--surface2)}
+.menu button[disabled]{color:var(--muted);text-decoration:line-through;cursor:not-allowed}
+.menu .label{padding:8px 10px 2px;display:block}
+.pager{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap}
+.chat{display:flex;flex-direction:column;gap:10px;max-height:480px}
+.msgs{overflow:auto;display:flex;flex-direction:column;gap:8px;min-height:140px;flex:1}
+.msg{background:var(--surface2);border-radius:10px;padding:8px 10px;overflow-wrap:anywhere}
+.msg .rp{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding-left:6px;margin-bottom:2px}
+.task{display:flex;gap:10px;align-items:center;padding:6px 0}
+.sw{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:6px 0}
+.field{display:flex;flex-direction:column;gap:4px}
+/* overlays */
+.scrim{position:fixed;inset:0;background:#0009;display:grid;place-items:center;padding:16px;z-index:50}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:min(540px,100%);max-height:88vh;overflow:auto;display:flex;flex-direction:column;gap:14px}
+.center{min-height:76vh;display:grid;place-items:center}
+.gate{max-width:480px;width:100%;display:flex;flex-direction:column;gap:16px;text-align:center;align-items:center}
+.gate .big{font-size:42px;font-family:var(--font-display);font-weight:700;line-height:1.1}
+#toasts{position:fixed;right:max(12px,env(safe-area-inset-right,0px));top:calc(12px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:8px;z-index:80;width:min(330px,calc(100vw - 24px))}
+.toast{background:var(--ink);color:var(--bg);border-radius:12px;padding:11px 14px;box-shadow:0 8px 24px #0004}
+.toast.dm{display:flex;gap:10px;align-items:center;cursor:pointer}
+.dock{position:fixed;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:70;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.dockp{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:6px;width:min(260px,calc(100vw - 32px));max-height:70vh;overflow:auto;box-shadow:0 8px 24px #0004}
+.dockp .btn{text-align:left}
+.drawer{position:fixed;right:0;top:0;bottom:0;width:min(360px,100vw);background:var(--surface);border-left:1px solid var(--line);z-index:60;padding:18px;padding-top:calc(18px + env(safe-area-inset-top,0px));display:flex;flex-direction:column;gap:12px;overflow:auto}
+table{border-collapse:collapse;width:100%}
+td,th{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.bubble{padding:8px 12px;border-radius:12px;background:var(--surface2);max-width:85%;overflow-wrap:anywhere}
+.bubble.me{background:var(--accent);color:var(--accent-ink);align-self:flex-end}
+.swatch{display:flex;height:26px;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
+.swatch i{flex:1}
+@media(prefers-reduced-motion:no-preference){.drawer{animation:slide .2s ease-out}@keyframes slide{from{transform:translateX(30px);opacity:0}}}
+</style>
+<div id="root"></div>
+<div id="toasts" aria-live="polite"></div>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=s=>{s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')};
+const hue=n=>{let h=0;for(const c of n)h=(h*31+c.charCodeAt(0))%360;return h};
+const PER=12;
+
+/* ---------- seasons (colors only; the owner switches them in Admin > Sessions) ---------- */
+const SEASONS={
+ default:{name:'Default',note:'',sw:['#2D5BFF','#EDF0F4','#17814F']},
+ thanksgiving:{name:'Thanksgiving',note:'Happy Thanksgiving from CoreFocus. Thank your study partners today.',sw:['#B4531A','#F3ECE2','#5E7A1F'],
+  l:{'--bg':'#F3ECE2','--surface':'#FFFAF2','--surface2':'#F6EBDD','--ink':'#2B1D12','--muted':'#6E5A48','--line':'#E2D2BD','--accent':'#B4531A','--accent-ink':'#FFFFFF','--credit':'#8A5A00','--ok':'#5E7A1F'},
+  d:{'--bg':'#18110B','--surface':'#221811','--surface2':'#2C2017','--ink':'#F5E9DA','--muted':'#B9A48D','--line':'#3D2E20','--accent':'#F0A04B','--accent-ink':'#18110B','--credit':'#F0C060','--ok':'#A9C46A'}},
+ halloween:{name:'Halloween',note:'Spooky season. Stay focused, the exams are the scary part.',sw:['#E8650A','#1B1226','#7C3AED'],
+  l:{'--bg':'#F1EAF7','--surface':'#FBF8FE','--surface2':'#EBE2F4','--ink':'#1E1230','--muted':'#6A5880','--line':'#D9CBE8','--accent':'#C2570C','--accent-ink':'#FFFFFF','--credit':'#7C3AED','--ok':'#2F8F4E'},
+  d:{'--bg':'#120B1B','--surface':'#1B1226','--surface2':'#251935','--ink':'#F1E8FA','--muted':'#A592BD','--line':'#37264D','--accent':'#FF7A1A','--accent-ink':'#120B1B','--credit':'#B794F6','--ok':'#7BD88F'}},
+ christmas:{name:'Christmas',note:'Happy holidays. Finish strong before the break.',sw:['#C0272D','#F2F6F1','#1F7A45'],
+  l:{'--bg':'#F2F6F1','--surface':'#FFFFFF','--surface2':'#E8F0E7','--ink':'#14241A','--muted':'#4F6556','--line':'#CFDDD0','--accent':'#C0272D','--accent-ink':'#FFFFFF','--credit':'#8F6A00','--ok':'#1F7A45'},
+  d:{'--bg':'#0D1A13','--surface':'#13241A','--surface2':'#1A2F22','--ink':'#EAF4EC','--muted':'#93AE9B','--line':'#27402F','--accent':'#FF6B6B','--accent-ink':'#0D1A13','--credit':'#F2C55C','--ok':'#5FD18A'}},
+ newyear:{name:'New Year',note:'New year, new streak. Day one starts now.',sw:['#C9A227','#0E1424','#7D9CFF'],
+  l:{'--bg':'#EEF0F6','--surface':'#FFFFFF','--surface2':'#E5E8F1','--ink':'#0E1424','--muted':'#555E78','--line':'#D3D8E6','--accent':'#8A6D00','--accent-ink':'#FFFFFF','--credit':'#8A6D00','--ok':'#17814F'},
+  d:{'--bg':'#090D1A','--surface':'#0F1526','--surface2':'#161E34','--ink':'#F0F2FA','--muted':'#98A2BE','--line':'#252E4A','--accent':'#E2BE4B','--accent-ink':'#090D1A','--credit':'#E2BE4B','--ok':'#4CC38A'}},
+ valentines:{name:"Valentine's",note:'Study dates welcome. Pin a partner and focus together.',sw:['#D6336C','#FDF0F4','#8E2DE2'],
+  l:{'--bg':'#FBEFF3','--surface':'#FFFFFF','--surface2':'#F8E3EA','--ink':'#2A1320','--muted':'#775566','--line':'#EBCBD7','--accent':'#C2255C','--accent-ink':'#FFFFFF','--credit':'#9C3A00','--ok':'#1B8A5A'},
+  d:{'--bg':'#190C12','--surface':'#22121A','--surface2':'#2D1823','--ink':'#FBEAF0','--muted':'#B995A6','--line':'#412430','--accent':'#FF7EA8','--accent-ink':'#190C12','--credit':'#F2C55C','--ok':'#5FD18A'}},
+ spring:{name:'Spring',note:'Fresh start. Open a window, open a book.',sw:['#2E9E5B','#F0F7EE','#E9A800'],
+  l:{'--bg':'#EFF6EC','--surface':'#FFFFFF','--surface2':'#E3EFDE','--ink':'#132014','--muted':'#51684F','--line':'#CBDDC6','--accent':'#237A47','--accent-ink':'#FFFFFF','--credit':'#8A6100','--ok':'#237A47'},
+  d:{'--bg':'#0C150D','--surface':'#122014','--surface2':'#192C1B','--ink':'#E9F4E7','--muted':'#93AC90','--line':'#264028','--accent':'#6FD08C','--accent-ink':'#0C150D','--credit':'#F2C55C','--ok':'#6FD08C'}},
+ summer:{name:'Summer',note:'Summer sessions. Short blocks, long days.',sw:['#0A93AD','#EAF7FA','#F2B705'],
+  l:{'--bg':'#EAF6F9','--surface':'#FFFFFF','--surface2':'#DDEEF3','--ink':'#0B2230','--muted':'#4A6676','--line':'#C4DDE6','--accent':'#07758C','--accent-ink':'#FFFFFF','--credit':'#8A6100','--ok':'#17814F'},
+  d:{'--bg':'#08161C','--surface':'#0E222B','--surface2':'#142E3A','--ink':'#E6F4F8','--muted':'#8EAFBB','--line':'#21404D','--accent':'#4FD0E8','--accent-ink':'#08161C','--credit':'#F5CB45','--ok':'#4CC38A'}}
+};
+(function injectSeasons(){
+  const css=o=>Object.keys(o).map(k=>k+':'+o[k]).join(';');
+  let out='';
+  Object.keys(SEASONS).forEach(id=>{const s=SEASONS[id];if(!s.l)return;const sel=':root[data-season="'+id+'"]';
+    out+=sel+'{'+css(s.l)+';--pat:radial-gradient(color-mix(in srgb,var(--accent) 9%,transparent) 1.2px,transparent 1.8px)}';
+    out+='@media (prefers-color-scheme:dark){:root:not([data-theme="light"])[data-season="'+id+'"]{'+css(s.d)+'}}';
+    out+=':root[data-theme="dark"][data-season="'+id+'"]{'+css(s.d)+'}'});
+  const st=document.createElement('style');st.textContent=out;document.head.appendChild(st);
+})();
+
+const S={
+  screen:'signin',nav:'main',roomId:null,page:0,owner:false,season:'thanksgiving',adminTab:'reports',
+  user:{name:'',bio:'',major:'',pfp:''},
+  cam:true,mic:false,credits:0,streak:0,acc:0,sinceCheck:0,afk:false,check:null,
+  pins:[],menuFor:null,modal:null,settings:false,dockOpen:false,speed:1,drawer:null,chatOpen:true,
+  dnd:false,goalChime:true,goal:null,goalHit:false,dmWith:'',
+  dms:{},
+  chat:[],replyTo:null,
+  cool:0,timeoutLeft:0,ambient:'off',vol:30,theme:'system',
+  tasks:[],
+  presets:[],
+  dbReports:[],ok16:false,samples:[]
+};
+const P={cat:'Exam prep',work:25,brk:5,phase:'focus',left:1500,running:false};
+const SH={cur:null,queue:[]};
+const ROOMS={
+  silent:{id:'silent',name:'Silent Study Hub',off:true,feat:{mic:false,chat:false,share:false},cap:50,desc:'Cameras only. No mics, no chat. Just focus.'},
+  hangout:{id:'hangout',name:'Hangout Hub',off:true,feat:{mic:true,chat:true,share:true},cap:50,desc:'Mics, text chat with replies, and fair screen sharing.'}
+};
+const SHOP=[
+  {c:'Platform cosmetics',n:'Neon Gold name color',p:500},{c:'Platform cosmetics',n:'Tokyo Rainy Night soundscape',p:1200},
+  {c:'Digital student goods',n:'Notion planner template pack',p:2000},{c:'Digital student goods',n:'Premium flashcard decks',p:3500},
+  {c:'Real-world perks',n:'$5 gift card',p:10000,real:1},{c:'Real-world perks',n:'1 month Grammarly or Spotify',p:15000,real:1}
+];
+const room=()=>ROOMS[S.roomId];
+const feat=()=>room()?room().feat:{};
+const count=r=>S.roomId===r.id?1+PEERS.length:0;
+
+function toast(h,cls){const d=document.createElement('div');d.className='toast '+(cls||'');d.innerHTML=h;$('#toasts').appendChild(d);setTimeout(()=>d.remove(),cls==='dm'?7000:4200);return d}
+let ac;function chime(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();[660,880].forEach((f,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.setValueAtTime(.0001,ac.currentTime+i*.18);g.gain.exponentialRampToValueAtTime(.15,ac.currentTime+i*.18+.02);g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+i*.18+.5);o.connect(g).connect(ac.destination);o.start(ac.currentTime+i*.18);o.stop(ac.currentTime+i*.18+.55)})}catch(e){}}
+let noise;function setAmbient(){try{if(noise){noise.src.stop();noise=null}if(S.ambient==='off')return;ac=ac||new (window.AudioContext||window.webkitAudioContext)();const len=ac.sampleRate*2,b=ac.createBuffer(1,len,ac.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;const src=ac.createBufferSource();src.buffer=b;src.loop=true;const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value={rain:2400,white:12000,cafe:700}[S.ambient];const g=ac.createGain();g.gain.value=S.vol/400;src.connect(f).connect(g).connect(ac.destination);src.start();noise={src,g}}catch(e){}}
+
+const earning=()=>P.running&&P.phase==='focus'&&!!S.roomId&&S.cam&&document.visibilityState==='visible'&&!S.afk&&!S.check;
+function whyNot(){if(!P.running)return'Press Start to begin.';if(P.phase!=='focus')return'Break time. No credits.';if(!S.roomId)return'Join a room to earn credits.';if(!S.cam)return'Camera is off. No credits.';if(S.afk)return'Paused. Tap "I am back".';if(S.check)return'Answer the focus check.';return'Earning 1 credit a minute.'}
+function yearsLeftFor(d){const t=new Date();let age=t.getFullYear()-d.getFullYear();if(t<new Date(t.getFullYear(),d.getMonth(),d.getDate()))age--;return 16-age}
+
+/* ---------- screens ---------- */
+const logo=()=>'<div class="logo"><i></i>CoreFocus</div>';
+const gate=inner=>'<div class="center"><div class="gate">'+logo()+inner+'</div></div>';
+function screenHTML(){
+  switch(S.screen){
+  case'signin':return gate('<h1 style="font-size:34px">Study with real people.<br>Earn for every focused minute.</h1><p class="muted">Silent rooms, hangout rooms and a reward shop. Sign in with Google to start.</p><button class="btn pri" data-act="signin">Continue with Google</button><p class="note">Preview: this button skips the real Google sign-in.</p>');
+  case'dob':return gate('<h2>One last step</h2><p class="muted">Enter your date of birth to finish your profile. You must be 16 or older. We do not keep your date of birth.</p><div class="field" style="width:100%;text-align:left"><label for="dob">Date of birth</label><input id="dob" type="date" required></div><button class="btn pri" data-act="dob">Continue</button>');
+  case'locked':return gate('<div class="big">Come back at 16</div><p class="muted">CoreFocus is for people aged 16 and over, so we cannot let you in yet. We did not save your date of birth or any details from this sign-in.</p><p class="muted">You are always welcome once you turn 16.</p><button class="btn" data-act="restart">Back to the start</button>');
+  case'timeout':return gate('<div class="big">Penalty box</div><p class="muted">You were put on a timeout for breaking the room rules.<br>Reason: mic abuse (flagged phrase at 12:04:18).</p><div class="mono" style="font-size:44px" id="toLeft">'+fmt(S.timeoutLeft)+'</div><p class="muted">Camera, mic and chat come back when the timer reaches zero.</p>');
+  case'ban':return gate('<div class="big">Account terminated</div><p class="muted">Your access was permanently removed for repeated violations of the community guidelines.</p><table><tr><th>Case ID</th><td class="mono">#884920</td></tr><tr><th>Evidence</th><td>Repeated looped-video flags on 3 days, reviewed by an admin.</td></tr></table><p class="muted">This decision is final. Earned Focus Credits were cleared.</p>');
+  case'profile':return profileHTML();
+  default:return appHTML()}
+}
+function appHTML(){
+  const tabs=[['main','Rooms'],['custom','Custom rooms'],['shop','Reward shop']];if(S.owner)tabs.push(['admin','Admin']);
+  const ss=SEASONS[S.season];
+  return'<div class="wrap"><div class="top">'+logo()+'<div class="tabs" role="tablist">'+tabs.map(t=>'<button class="tab" role="tab" aria-current="'+(S.nav===t[0])+'" data-act="nav" data-arg="'+t[0]+'">'+t[1]+'</button>').join('')+'</div>'+
+  '<span class="chip cr"><span class="mono" id="credits">'+Math.floor(S.credits)+'</span> credits</span><span class="chip">'+S.streak+' day streak</span><button class="btn" data-act="drawer" data-arg="dm">Messages</button><button class="av" data-act="settings" aria-label="Profile and settings">'+(S.user.pfp?'<img src="'+S.user.pfp+'" alt="">':esc(S.user.name[0]||'A'))+'</button></div>'+
+  (S.season!=='default'&&ss.note?'<div class="season">'+esc(ss.note)+'</div>':'')+
+  '<div class="focus"><span class="t mono" id="pomoTime">'+fmt(P.left)+'</span><span class="tag">'+(P.phase==='focus'?'Focus':'Break')+'</span><button class="btn pri" data-act="pomo">'+(P.running?'Pause':'Start')+'</button><button class="btn" data-act="pomoreset">Reset</button><span class="status '+(earning()?'on':'off')+'" id="pomoWhy" style="flex:1;min-width:160px">'+whyNot()+'</span>'+(S.afk?'<button class="btn pri" data-act="stillhere">I am back</button>':'')+'<button class="btn" data-act="drawer" data-arg="tasks">Tasks ('+S.tasks.filter(t=>!t.d).length+')</button></div>'+
+  mainHTML()+'</div>'+
+  (S.drawer==='dm'?dmHTML():'')+(S.drawer==='tasks'?tasksHTML():'')+(S.settings?settingsHTML():'')+modalHTML()+checkHTML();
+}
+function mainHTML(){
+  if(S.nav==='shop')return shopHTML();
+  if(S.nav==='admin'&&S.owner)return adminHTML();
+  if(S.roomId&&((S.nav==='main'&&room().off)||(S.nav==='custom'&&!room().off)))return roomHTML();
+  if(S.nav==='custom')return customHTML();
+  return'<div><h2>Study rooms</h2><p class="muted" style="margin:6px 0 0">Two official rooms, always open. Pick one.</p></div><div class="cards">'+['silent','hangout'].map(k=>{const r=ROOMS[k];return'<div class="card"><h3>'+r.name+'</h3><p class="muted" style="margin:0">'+r.desc+'</p>'+tagsHTML(r)+'<div class="note">Up to '+r.cap+' people</div>'+'<button class="btn pri" data-act="join" data-arg="'+k+'">Join</button></div>'}).join('')+'</div>';
+}
+function tagsHTML(r){return'<div class="tags"><span class="tag yes">Camera</span>'+[['mic','Mic'],['chat','Chat'],['share','Share']].map(f=>'<span class="tag '+(r.feat[f[0]]?'yes':'no')+'">'+f[1]+'</span>').join('')+'</div>'}
+function customHTML(){
+  return'<div class="row spread"><div><h2>Custom rooms</h2><p class="muted" style="margin:6px 0 0">Made by members, kept apart from the official rooms.</p></div><button class="btn pri" data-act="newroom">Create a room</button></div><div class="cards">'+Object.values(ROOMS).filter(r=>!r.off).map(r=>'<div class="card"><h3>'+esc(r.name)+'</h3><div class="note">Hosted by '+esc(r.host)+' · up to '+r.cap+' people</div>'+tagsHTML(r)+'<button class="btn" data-act="join" data-arg="'+r.id+'">Join</button></div>').join('')+'</div>'+(Object.values(ROOMS).some(r=>!r.off)?'':'<div class="panel"><b>No custom rooms yet.</b><p class="muted" style="margin:6px 0 0">Press Create a room and choose its rules.</p></div>');
+}
+/* everyone in the room, newest page first; pinned people always lead page 1 */
+function everyone(r){
+  const real=PEERS.map(p=>({n:String(p.presence.n||'Guest').slice(0,24),cam:!!p.presence.cam,mic:!!p.presence.mic,live:true}));
+  const all=real;
+  const pin=all.filter(x=>S.pins.includes(x.n)),rest=all.filter(x=>!S.pins.includes(x.n));
+  return pin.concat(rest);
+}
+function tileHTML(x){
+  const h=hue(x.n),f=feat();
+  return'<div class="cell"><div class="tile" style="background:linear-gradient(135deg,hsl('+h+' 38% 34%),hsl('+h+' 38% 17%))"><span class="ini">'+esc(x.n[0])+'</span>'+(x.cam?'':'<div class="off">Camera off</div>')+(S.pins.includes(x.n)?'<span class="pinned">Pinned</span>':'')+'<span class="nm">'+(x.live?'<b style="background:var(--ok);color:#fff;border-radius:4px;padding:0 5px;font-size:11px">LIVE</b>':'')+esc(x.n)+(f.mic&&x.mic?' · mic on':'')+'</span></div><button class="dots" data-act="menu" data-arg="'+esc(x.n)+'" aria-label="Options for '+esc(x.n)+'">&#8942;</button>'+(S.menuFor===x.n?menuHTML(x.n):'')+'</div>';
+}
+function menuHTML(n){
+  const f=feat();const rep=[['cam','Camera stream',true],['afk','AFK or cheating',true],['mic','Mic audio',f.mic],['chat','Text chat',f.chat],['share','Screen share',f.share]];
+  return'<div class="menu"><button data-act="pin" data-arg="'+esc(n)+'">'+(S.pins.includes(n)?'Unpin':'Pin to top')+'</button><button data-act="msgto" data-arg="'+esc(n)+'">Message</button><span class="label">Report</span>'+rep.map(o=>'<button '+(o[2]?'data-act="report" data-arg="'+esc(n)+'|'+o[1]+'"':'disabled title="Not in this room"')+'>'+o[1]+'</button>').join('')+'</div>';
+}
+function roomHTML(){
+  const r=room(),f=r.feat,all=everyone(r),pages=Math.max(1,Math.ceil((all.length+1)/PER));
+  if(S.page>=pages)S.page=pages-1;
+  const start=S.page===0?0:S.page*PER-1,slice=all.slice(start,start+(S.page===0?PER-1:PER));
+  const self='<div class="cell"><div class="tile you" style="background:linear-gradient(135deg,hsl(220 40% 32%),hsl(220 40% 16%))">'+(S.user.pfp?'<img src="'+S.user.pfp+'" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">':'<span class="ini">'+esc(S.user.name[0]||'A')+'</span>')+''+(S.cam?'':'<div class="off">Your camera is off.<br>No credits while it is off.</div>')+'<span class="nm">You'+(f.mic?(S.mic?' · mic on':' · muted'):'')+'</span></div></div>';
+  return'<div class="row spread"><div><h2>'+esc(r.name)+'</h2><span class="cap">'+count(r)+'/'+r.cap+' people</span></div><div class="row"><button class="btn" data-act="cam">'+(S.cam?'Camera off':'Camera on')+'</button>'+(f.mic?'<button class="btn" data-act="mic">'+(S.mic?'Mute':'Unmute')+'</button>':'')+(f.share?'<button class="btn" data-act="share">Share screen</button>':'')+(f.chat?'<button class="btn" data-act="chattog">'+(S.chatOpen?'Hide chat':'Show chat')+'</button>':'')+'<button class="btn" data-act="leave">Leave</button></div></div>'+
+  (f.share?'<div class="bar" id="shareBar">'+shareBarHTML()+'</div>':'')+
+  '<div class="room '+(f.chat&&S.chatOpen?'haschat':'')+'"><div class="stack" style="display:flex;flex-direction:column;gap:14px"><div class="grid">'+(S.page===0?self:'')+slice.map(tileHTML).join('')+'</div>'+
+  '<div class="pager"><button class="btn sm" data-act="page" data-arg="-1"'+(S.page===0?' disabled':'')+'>Previous</button><span class="note">Page '+(S.page+1)+' of '+pages+'</span><button class="btn sm" data-act="page" data-arg="1"'+(S.page>=pages-1?' disabled':'')+'>Next</button></div>'+
+  '<p class="note" style="text-align:center;margin:0">'+(all.length?'Tiles show real people who have this page open.':'You are the only one here right now.')+' Camera video needs a video service.</p></div>'+(f.chat&&S.chatOpen?chatHTML():'')+'</div>';
+}
+function shareBarHTML(){
+  const you=S.cool>0?'<div class="status off" style="margin-top:8px">Share cooldown: '+fmt(S.cool)+' before you can request again.</div>':'';
+  if(!SH.cur)return'<b>Nobody is sharing.</b> Anyone can start. Each turn lasts 15 minutes.'+you;
+  const mine=SH.cur.who==='You',inq=SH.queue.indexOf('You');
+  let s='<div class="row spread"><span><b>'+esc(SH.cur.who)+'</b> is sharing · <span class="mono">'+fmt(SH.cur.left)+'</span> left</span>'+(mine?'<button class="btn sm bad" data-act="stopshare">Stop sharing</button>':'')+'</div>';
+  if(mine&&SH.queue.length)s+='<div class="status off" style="margin-top:8px">'+esc(SH.queue[0])+' wants to share. You have '+fmt(SH.cur.left)+' to wrap up.</div>';
+  if(inq>=0)s+='<div class="status" style="margin-top:8px">You are #'+(inq+1)+' in line. You go live in about <span class="mono">'+fmt(SH.cur.left+inq*900)+'</span>. <button class="btn sm" data-act="cancelq">Leave line</button></div>';
+  else if(SH.queue.length)s+='<div class="note" style="margin-top:6px">Next up: '+SH.queue.map(esc).join(', ')+'</div>';
+  return s+you;
+}
+function chatHTML(){
+  return'<div class="panel chat"><div class="label">Room chat</div><div class="msgs">'+S.chat.map((m,i)=>'<div class="msg">'+(m.rep?'<div class="rp">'+esc(m.rep)+'</div>':'')+'<b>'+esc(m.who)+'</b> '+esc(m.t)+' <button class="btn sm" style="border:0;background:none;color:var(--muted);padding:0 4px" data-act="reply" data-arg="'+i+'">Reply</button></div>').join('')+'</div>'+(S.replyTo!==null&&S.chat[S.replyTo]?'<div class="note">Replying to '+esc(S.chat[S.replyTo].who)+' <button class="btn sm" data-act="reply" data-arg="x">Cancel</button></div>':'')+'<form id="chatForm" class="row" style="flex-wrap:nowrap"><input id="chatIn" style="flex:1" placeholder="Message the room" autocomplete="off"><button class="btn pri">Send</button></form></div>';
+}
+function tasksHTML(){
+  return'<div class="drawer" role="dialog" aria-label="Tasks"><div class="row spread"><h3>My tasks</h3><button class="btn sm" data-act="drawer" data-arg="">Close</button></div><div>'+S.tasks.map((t,i)=>'<label class="task"><input type="checkbox" data-act="task" data-arg="'+i+'"'+(t.d?' checked':'')+'><span style="'+(t.d?'text-decoration:line-through;color:var(--muted)':'')+'">'+esc(t.t)+'</span></label>').join('')+'</div><form id="taskForm" class="row" style="flex-wrap:nowrap"><input id="taskIn" style="flex:1" placeholder="Add a task"><button class="btn">Add</button></form></div>';
+}
+function dmHTML(){
+  const w=S.dmWith,msgs=S.dms[w]||[];
+  return'<div class="drawer" role="dialog" aria-label="Messages"><div class="row spread"><h3>Messages</h3><button class="btn sm" data-act="drawer" data-arg="">Close</button></div><div class="row">'+Object.keys(S.dms).map(n=>'<button class="btn sm'+(n===w?' pri':'')+'" data-act="dmwith" data-arg="'+esc(n)+'">'+esc(n)+'</button>').join('')+'</div><div class="msgs" style="gap:6px">'+msgs.map(m=>'<div class="bubble'+(m.me?' me':'')+'">'+esc(m.t)+'</div>').join('')+'</div>'+(S.dms[w]?'<form id="dmForm" class="row" style="flex-wrap:nowrap"><input id="dmIn" style="flex:1" placeholder="Message '+esc(w)+'" autocomplete="off"><button class="btn pri">Send</button></form>':'<p class="muted">No messages yet. Use the three dots on a tile and choose Message.</p>')+'<p class="note">Preview: messages stay on this device until the real app is connected.</p></div>';
+}
+function shopHTML(){
+  const cats=[...new Set(SHOP.map(i=>i.c))];
+  return'<div class="row spread"><div><h2>Reward shop</h2><p class="muted" style="margin:6px 0 0">Pin a goal and you get a chime when you can afford it.</p></div><span class="chip cr"><b class="mono">'+Math.floor(S.credits)+'</b> credits</span></div>'+cats.map(c=>'<div class="label">'+c+(c==='Real-world perks'?' (needs sponsors)':'')+'</div><div class="cards">'+SHOP.filter(i=>i.c===c).map(i=>{const k=SHOP.indexOf(i);return'<div class="card"><b>'+i.n+'</b><span class="mono" style="color:var(--credit)">'+i.p.toLocaleString()+' credits</span><div class="row"><button class="btn pri" data-act="redeem" data-arg="'+k+'"'+(i.real||S.credits<i.p?' disabled':'')+'>'+(i.real?'Coming with sponsors':'Redeem')+'</button><button class="btn" data-act="goal" data-arg="'+k+'">'+(S.goal===k?'Goal pinned':'Pin goal')+'</button></div></div>'}).join('')+'</div>').join('');
+}
+/* ---------- owner-only admin ---------- */
+function adminHTML(){
+  const tabs=[['reports','Reports'],['sessions','Sessions']];
+  const body=S.adminTab==='sessions'?sessionsHTML():reportsHTML();
+  return'<div class="row spread"><div><h2>Admin</h2><p class="muted" style="margin:6px 0 0">Only you can see this page.</p></div><div class="tabs">'+tabs.map(t=>'<button class="tab" aria-current="'+(S.adminTab===t[0])+'" data-act="admtab" data-arg="'+t[0]+'">'+t[1]+'</button>').join('')+'</div></div>'+body;
+}
+function reportsHTML(){
+  const list=S.dbReports.concat(S.samples);
+  return'<div class="label">Report queue ('+list.filter(r=>!r.done).length+' open)</div>'+(list.length?'':'<div class="panel muted">No reports yet.</div>')+list.map(r=>'<div class="panel"><div class="row spread"><b>'+esc(r.who)+' reported by '+esc(r.by)+'</b><span class="tag">'+esc(r.room)+'</span></div><p style="margin:8px 0"><b>Reason:</b> '+esc(r.why)+' · <b>Room rules then:</b> '+esc(r.rule)+'</p><p class="mono" style="font-size:13px;background:var(--surface2);padding:10px;border-radius:10px;overflow-wrap:anywhere;margin:0 0 8px">'+esc(r.log)+'</p><p style="margin:0 0 8px"><b>Bot action:</b> '+esc(r.st)+'</p>'+(r.done?'<div class="status on">Decision: '+esc(r.done)+'</div>':'<div class="row"><button class="btn" data-act="adm" data-arg="'+esc(r.id)+'|Dismissed">Dismiss</button><button class="btn" data-act="adm" data-arg="'+esc(r.id)+'|Timeout extended 1 hr">Extend timeout 1 hr</button><button class="btn bad" data-act="adm" data-arg="'+esc(r.id)+'|Permanent ban">Permanent ban</button></div>')+'</div>').join('')+'<p class="note">The AI can only apply a short timeout. Only you can issue a permanent ban.</p>';
+}
+function sessionsHTML(){
+  return'<div class="panel"><div class="row spread"><div><h3>Sessions</h3><p class="muted" style="margin:4px 0 0">Pick a look for everyone. Right now: <b>'+esc(SEASONS[S.season].name)+'</b>.</p></div><button class="btn'+(S.season==='default'?' pri':'')+'" data-act="season" data-arg="default">Back to default look</button></div></div><div class="cards">'+Object.keys(SEASONS).filter(k=>k!=='default').map(k=>{const s=SEASONS[k];return'<div class="card"><h3>'+esc(s.name)+'</h3><div class="swatch">'+s.sw.map(c=>'<i style="background:'+c+'"></i>').join('')+'</div><p class="note" style="margin:0">'+esc(s.note)+'</p><button class="btn'+(S.season===k?'':' pri')+'" data-act="season" data-arg="'+k+'"'+(S.season===k?' disabled':'')+'>'+(S.season===k?'Active now':'Apply for everyone')+'</button></div>'}).join('')+'</div>';
+}
+function pfpBlock(){
+  return'<div class="row"><span class="av" style="width:64px;height:64px;font-size:24px">'+(S.user.pfp?'<img src="'+S.user.pfp+'" alt="Your profile picture">':esc(S.user.name[0]||'?'))+'</span><div class="field"><label for="pfpIn">Profile picture</label><input id="pfpIn" type="file" accept="image/*"></div>'+(S.user.pfp?'<button type="button" class="btn sm" data-act="pfpdel">Remove</button>':'')+'</div>';
+}
+function profileHTML(){
+  return'<div class="center"><div class="gate" style="text-align:left;align-items:stretch">'+logo()+'<h2>Set up your profile</h2><p class="muted" style="margin:0">This is what other people see in rooms. You can change it later in settings.</p>'+pfpBlock()+'<div class="field"><label for="un">Display name</label><input id="un" data-bind="name" value="'+esc(S.user.name)+'" maxlength="24" placeholder="Your name"></div><div class="field"><label for="ub">Bio</label><textarea id="ub" data-bind="bio" rows="2" maxlength="140" placeholder="Optional">'+esc(S.user.bio)+'</textarea></div><div class="field"><label for="um">Major or goal</label><input id="um" data-bind="major" value="'+esc(S.user.major)+'" placeholder="Optional"></div><button class="btn pri" data-act="profilego">Start studying</button></div></div>';
+}
+function readPfp(file){
+  const fr=new FileReader();
+  fr.onload=()=>{const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d'),m=Math.min(im.width,im.height);x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,160,160);S.user.pfp=c.toDataURL('image/jpeg',.8);render()};im.onerror=()=>toast('That file is not an image I can read.');im.src=fr.result};
+  fr.onerror=()=>toast('Could not read that file.');fr.readAsDataURL(file);
+}
+function settingsHTML(){
+  const sw=(k,l,d)=>'<div class="sw"><div><div>'+l+'</div>'+(d?'<div class="note">'+d+'</div>':'')+'</div><input type="checkbox" data-act="sw" data-arg="'+k+'"'+(S[k]?' checked':'')+'></div>';
+  return'<div class="scrim" data-act="closeset"><div class="modal" role="dialog" aria-label="Settings"><div class="row spread"><h2>Profile and settings</h2><button class="btn sm" data-act="closeset">Done</button></div>'+
+  '<div class="label">Profile</div>'+pfpBlock()+'<div class="field"><label for="un">Display name</label><input id="un" data-bind="name" value="'+esc(S.user.name)+'" maxlength="24"></div><div class="field"><label for="ub">Bio</label><textarea id="ub" data-bind="bio" rows="2" maxlength="140">'+esc(S.user.bio)+'</textarea></div><div class="field"><label for="um">Major or goal</label><input id="um" data-bind="major" value="'+esc(S.user.major)+'"></div>'+
+  '<div class="label">Focus</div>'+sw('dnd','Do not disturb','Blocks direct messages while on.')+sw('goalChime','Credit goal chime','A soft chime when you can afford your pinned reward.')+'<div class="row"><label>Focus min <input id="pw" type="number" min="5" max="90" value="'+P.work+'" style="width:70px"></label><label>Break min <input id="pb" type="number" min="1" max="30" value="'+P.brk+'" style="width:70px"></label><select id="pcat" aria-label="Activity">'+['Exam prep','Essay writing','Research','Coding','Reading'].map(c=>'<option'+(c===P.cat?' selected':'')+'>'+c+'</option>').join('')+'</select></div>'+
+  '<div class="label">Sound</div><div class="row"><select id="amb">'+[['off','Ambient off'],['rain','Rain'],['white','White noise'],['cafe','Cafe murmur']].map(o=>'<option value="'+o[0]+'"'+(S.ambient===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select><input id="vol" type="range" min="0" max="100" value="'+S.vol+'" aria-label="Volume"></div>'+
+  '<div class="label">Devices</div><div class="row"><select id="cd" aria-label="Camera"><option>Built-in camera</option><option>External webcam</option></select><select id="md" aria-label="Microphone"><option>Built-in microphone</option><option>Headset</option></select></div><p class="note">Device lists are examples until a video service is connected.</p>'+
+  '<div class="label">Pinned partners</div><p class="muted" style="margin:0">'+(S.pins.length?esc(S.pins.join(', ')):'Use the three dots on a tile to pin up to 4 people.')+'</p>'+
+  '<div class="label">Light or dark</div><select id="theme"><option value="system">Match my device</option><option value="light"'+(S.theme==='light'?' selected':'')+'>Light</option><option value="dark"'+(S.theme==='dark'?' selected':'')+'>Dark</option></select></div></div>';
+}
+function modalHTML(){
+  const m=S.modal;if(!m)return'';
+  if(m.t==='report')return'<div class="scrim"><div class="modal"><h2>Report '+esc(m.who)+'</h2><p style="margin:0">Reason: <b>'+esc(m.why)+'</b> in '+esc(room().name)+'.</p><p class="muted" style="margin:0">The AI checks the saved evidence and the room settings at that moment before anything happens. A false report does nothing to the other person.</p><div class="row"><button class="btn pri" data-act="sendreport">Send report</button><button class="btn" data-act="closemodal">Cancel</button></div></div></div>';
+  if(m.t==='result')return'<div class="scrim"><div class="modal"><h2>Report checked</h2><ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px"><li>Evidence saved: '+esc(m.ev)+'</li><li>Room settings at that time: '+esc(m.rules)+'</li><li><b>'+esc(m.verdict)+'</b></li></ol><p class="note" style="margin:0">Simulated outcome. Real checks come with the moderation service.</p><button class="btn pri" data-act="closemodal">Close</button></div></div>';
+  if(m.t==='new')return'<div class="scrim"><form class="modal" id="roomForm"><h2>Create a custom room</h2><div class="field"><label for="rt">Room title</label><input id="rt" required maxlength="30" placeholder="Calculus night session" value="'+esc(m.title||'')+'"></div><div class="sw"><span>Mic</span><input id="rm" type="checkbox"'+(m.mic?' checked':'')+'></div><div class="sw"><span>Text chat</span><input id="rc" type="checkbox"'+(m.chat?' checked':'')+'></div><div class="sw"><span>Screen share queue</span><input id="rs" type="checkbox"'+(m.share?' checked':'')+'></div><div class="field"><label for="rl">Max people: <b id="rlv">'+(m.cap||20)+'</b></label><input id="rl" type="range" min="2" max="50" value="'+(m.cap||20)+'"></div><div class="field"><label for="rp">Presets</label><div class="row"><select id="rp"><option value="">Choose a preset</option>'+S.presets.map((p,i)=>'<option value="'+i+'">'+esc(p.n)+'</option>').join('')+'</select><button type="button" class="btn sm" data-act="savepreset">Save these as a preset</button></div></div><div class="row"><button class="btn pri">Create room</button><button type="button" class="btn" data-act="closemodal">Cancel</button></div></form></div>';
+  return'';
+}
+function checkHTML(){return S.check?'<div class="scrim"><div class="modal"><h2>Keep focus active?</h2><p class="muted" style="margin:0">Tap within <b class="mono" id="chkLeft">'+fmt(S.check.left)+'</b> or credits pause.</p><button class="btn pri" data-act="stillhere">I am still here</button></div></div>':''}
+function dockHTML(){
+  if(!S.owner)return'';
+  const b=(a,l,g)=>'<button class="btn sm" data-act="'+a+'"'+(g!==undefined?' data-arg="'+g+'"':'')+'>'+l+'</button>';
+  return'<div class="dock">'+(S.dockOpen?'<div class="dockp"><div class="label">Preview screens (owner only)</div>'+b('jump','Sign-in screen','signin')+b('jump','Date of birth screen','dob')+b('jump','Profile setup screen','profile')+b('jump','Under-16 screen','locked')+b('jump','Timeout screen','timeout')+b('jump','Permanent ban screen','ban')+b('jump','Back to the app','app')+'</div>':'')+'<button class="btn sm" data-act="dock" aria-expanded="'+S.dockOpen+'">'+(S.dockOpen?'Close preview screens':'Preview screens')+'</button></div>';
+}
+
+/* ---------- render ---------- */
+function render(){
+  const sx=window.scrollX,sy=window.scrollY;
+  $('#root').innerHTML=screenHTML()+dockHTML();save();
+  window.scrollTo(sx,sy);
+  const th=document.documentElement;
+  if(S.theme==='system')th.removeAttribute('data-theme');else th.setAttribute('data-theme',S.theme);
+  if(S.season==='default'||!SEASONS[S.season])th.removeAttribute('data-season');else th.setAttribute('data-season',S.season);
+}
+const rr=(id,fn)=>{const e=document.getElementById(id);if(e)e.innerHTML=fn()};
+
+/* ---------- actions ---------- */
+const A={
+  signin(){S.screen='dob';render()},
+  dob(){const v=$('#dob').value;if(!v){toast('Enter your date of birth to continue.');return}const d=new Date(v+'T00:00:00');if(d>new Date()||d.getFullYear()<1900){toast('That date does not look right. Check it and try again.');return}
+    if(yearsLeftFor(d)>0){S.screen='locked'}else{S.ok16=true;S.screen=S.user.name?'app':'profile'}render()},
+  profilego(){if(!S.user.name.trim()){toast('Enter a display name to continue.');return}S.screen='app';render()},
+  pfpdel(){S.user.pfp='';render()},
+  restart(){S.screen='signin';render()},
+  jump(a){if(a==='timeout')S.timeoutLeft=600;S.screen=a;render()},
+  nav(a){S.nav=a;S.menuFor=null;if(a!=='shop'&&a!=='admin'&&S.roomId&&!((a==='main'&&room().off)||(a==='custom'&&!room().off)))leave(true);render()},
+  join(a){if(S.roomId&&S.roomId!==a)leave(true);S.roomId=a;S.page=0;S.nav=ROOMS[a].off?'main':'custom';S.menuFor=null;toast('Joined '+esc(ROOMS[a].name));render();joinLive(a)},
+  leave(){leave();render()},
+  cam(){S.cam=!S.cam;syncPresence();render()},mic(){S.mic=!S.mic;syncPresence();render()},
+  chattog(){S.chatOpen=!S.chatOpen;render()},
+  page(a){S.page=Math.max(0,S.page+(+a));S.menuFor=null;render()},
+  pin(a){const i=S.pins.indexOf(a);if(i>=0)S.pins.splice(i,1);else if(S.pins.length>=4){toast('You can pin up to 4 people.');return}else S.pins.push(a);S.menuFor=null;render()},
+  menu(a){S.menuFor=S.menuFor===a?null:a;render()},
+  msgto(a){S.menuFor=null;if(!S.dms[a])S.dms[a]=[];S.dmWith=a;S.drawer='dm';render()},
+  report(a){const i=a.lastIndexOf('|');S.menuFor=null;S.modal={t:'report',who:a.slice(0,i),why:a.slice(i+1)};render()},
+  sendreport(){const m=S.modal,r=room(),f=r.feat;const bad=Math.random()<.5;const rules='Mic '+(f.mic?'ON':'OFF')+', Chat '+(f.chat?'ON':'OFF')+', Share '+(f.share?'ON':'OFF');
+    const ev=m.why==='Mic audio'?'30-second audio clip':m.why==='Text chat'?'last 5 minutes of chat':'camera frames and focus signals';
+    const verdict=bad?'Violation confirmed. 10-minute timeout applied and sent to the owner for review.':'No violation found. Report dismissed and no action taken.';
+    S.modal={t:'result',ev,rules,verdict};
+    if(bad)S.dbReports.unshift({id:'r'+Date.now(),who:m.who,by:'You',room:r.name,why:m.why,log:'Evidence: '+ev+' (preview)',rule:rules,st:'Timeout 10 min applied by AI'});
+    render()},
+  closemodal(){S.modal=null;render()},
+  newroom(){S.modal={t:'new'};render()},
+  savepreset(){const g=id=>document.getElementById(id);const n=g('rt').value.trim()||'My preset';S.presets.push({n,mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked});S.modal={t:'new',title:g('rt').value,mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked,cap:+g('rl').value};toast('Preset saved: '+esc(n));render()},
+  pomo(){P.running=!P.running;render()},
+  pomoreset(){P.phase='focus';P.left=P.work*60;P.running=false;render()},
+  task(a){S.tasks[a].d=!S.tasks[a].d;render()},
+  reply(a){S.replyTo=a==='x'?null:+a;render();const i=$('#chatIn');if(i)i.focus()},
+  share(){
+    if(S.cool>0){toast('Wait '+fmt(S.cool)+' before requesting a screen share again.');return}
+    if(!SH.cur){SH.cur={who:'You',left:900};toast('You are sharing for 15 minutes.')}
+    else if(SH.cur.who==='You'){toast('You are already sharing.');return}
+    else if(SH.queue.includes('You')){toast('You are already in line.');return}
+    else{SH.queue.push('You');if(SH.cur.left>120)SH.cur.left=120;toast(esc(SH.cur.who)+' was told they have '+fmt(SH.cur.left)+' left. You go live after.')}
+    rr('shareBar',shareBarHTML)},
+  stopshare(){if(SH.cur&&SH.cur.who==='You'){S.cool=300;nextShare()}render()},
+  cancelq(){SH.queue=SH.queue.filter(x=>x!=='You');S.cool=300;toast('You left the line. 5 minute cooldown started.');rr('shareBar',shareBarHTML)},
+  redeem(a){const i=SHOP[a];if(S.credits<i.p)return;S.credits-=i.p;if(S.goal===+a)S.goal=null;toast('Unlocked: '+esc(i.n));render()},
+  goal(a){S.goal=S.goal===+a?null:+a;S.goalHit=false;render()},
+  settings(){S.settings=true;render()},
+  closeset(){S.settings=false;render()},
+  sw(a){S[a]=!S[a];if(a==='dnd')toast(S.dnd?'Do not disturb is on.':'Do not disturb is off.')},
+  drawer(a){S.drawer=a||null;render()},
+  dmwith(a){S.dmWith=a;render()},
+  dock(){S.dockOpen=!S.dockOpen;render()},
+  stillhere(){S.check=null;S.afk=false;S.sinceCheck=0;render()},
+  admtab(a){S.adminTab=a;render()},
+  adm(a){const i=a.lastIndexOf('|'),id=a.slice(0,i),d=a.slice(i+1);const r=S.dbReports.find(x=>x.id===id)||S.samples.find(x=>x.id===id);if(!r)return;r.done=d;
+    render()},
+  season(a){if(!S.owner||!SEASONS[a])return;S.season=a;
+    if(DB)DB.doc('site/season').set({id:a,at:Date.now()}).then(()=>toast(SEASONS[a].name+' is live for everyone.')).catch(()=>toast('Applied here only. Could not save for everyone.'));
+    else toast(SEASONS[a].name+' applied on this device.');render()}
+};
+function leave(quiet){const r=room();if(!r)return;if(r.id==='mine'){delete ROOMS.mine;if(!quiet)toast('Your empty room was closed.')}S.roomId=null;S.menuFor=null;S.page=0;leaveLive()}
+function nextShare(){if(SH.queue.length){const n=SH.queue.shift();SH.cur={who:n,left:900};if(n==='You')toast('You are live. 15 minutes.')}else SH.cur=null}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('[data-act]');
+  if(!t){if(S.menuFor){S.menuFor=null;render()}return}
+  if(t.dataset.act==='closeset'&&!e.target.closest('button[data-act="closeset"]')&&e.target!==t)return;
+  const fn=A[t.dataset.act];if(fn)fn(t.dataset.arg);
+});
+document.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.id==='pfpIn'&&t.files&&t.files[0])readPfp(t.files[0]);
+  if(t.id==='amb'){S.ambient=t.value;setAmbient()}
+  if(t.id==='pcat')P.cat=t.value;
+  if(t.id==='pw'){P.work=Math.max(5,Math.min(90,+t.value||25));if(!P.running&&P.phase==='focus'){P.left=P.work*60}}
+  if(t.id==='pb')P.brk=Math.max(1,Math.min(30,+t.value||5));
+  if(t.id==='theme'){S.theme=t.value;render()}
+  if(t.id==='rp'&&t.value!==''){const p=S.presets[+t.value];S.modal={t:'new',title:$('#rt').value,mic:p.mic,chat:p.chat,share:p.share,cap:+$('#rl').value};render()}
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset&&t.dataset.bind){S.user[t.dataset.bind]=t.value;syncPresence()}
+  if(t.id==='vol'){S.vol=+t.value;if(noise)noise.g.gain.value=S.vol/400}
+  if(t.id==='rl'){$('#rlv').textContent=t.value}
+});
+document.addEventListener('submit',e=>{
+  e.preventDefault();const id=e.target.id;
+  if(id==='chatForm'){const v=$('#chatIn').value.trim();if(!v)return;
+    if(LIVE){const r=S.replyTo!==null&&S.chat[S.replyTo]?S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):'';S.replyTo=null;LIVE.emit('chat',{n:String(S.user.name||'Guest').slice(0,24),t:v.slice(0,300),r}).catch(()=>toast('Message not sent. Try again.'));$('#chatIn').value='';return}
+    S.chat.push({who:'You',t:v,rep:S.replyTo!==null&&S.chat[S.replyTo]?'Replying to '+S.chat[S.replyTo].who+': '+S.chat[S.replyTo].t.slice(0,60):''});S.replyTo=null;render();$('#chatIn').focus()}
+  if(id==='taskForm'){const v=$('#taskIn').value.trim();if(!v)return;S.tasks.push({t:v,d:false});render();$('#taskIn').focus()}
+  if(id==='dmForm'){const v=$('#dmIn').value.trim();if(!v)return;S.dms[S.dmWith].push({me:true,t:v});render();$('#dmIn').focus()}
+  if(id==='roomForm'){const g=x=>document.getElementById(x);const title=g('rt').value.trim();if(!title)return;
+    ROOMS.mine={id:'mine',name:title,feat:{mic:g('rm').checked,chat:g('rc').checked,share:g('rs').checked},cap:+g('rl').value,count:0,host:'You'};S.modal=null;A.join('mine')}
+});
+document.addEventListener('visibilitychange',()=>{if(S.screen==='app'){rr('pomoWhy',whyNot);const w=$('#pomoWhy');if(w)w.className='status '+(earning()?'on':'off')}});
+
+setInterval(()=>{
+  const dt=S.speed;
+  if(S.screen==='timeout'){S.timeoutLeft-=dt;if(S.timeoutLeft<=0){S.screen='app';render()}else{const e=$('#toLeft');if(e)e.textContent=fmt(S.timeoutLeft)}return}
+  if(S.cool>0)S.cool=Math.max(0,S.cool-dt);
+  if(SH.cur){SH.cur.left-=dt;if(SH.cur.left<=0){if(SH.cur.who==='You')S.cool=300;nextShare();if(S.screen==='app')render()}}
+  if(P.running){P.left-=dt;if(P.left<=0){P.phase=P.phase==='focus'?'break':'focus';P.left=(P.phase==='focus'?P.work:P.brk)*60;toast(P.phase==='focus'?'Break over. Back to focus.':'Focus block done. Take a break.');if(S.screen==='app')render()}}
+  if(earning()){S.acc+=dt;S.sinceCheck+=dt;
+    while(S.acc>=60){S.acc-=60;S.credits+=1}
+    if(S.sinceCheck>=2400&&!S.check){S.check={left:60};render()}}
+  if(S.check){S.check.left-=dt;const c=$('#chkLeft');if(c)c.textContent=fmt(S.check.left);if(S.check.left<=0){S.check=null;S.afk=true;toast('Credits paused. Tap "I am back" to resume.');render()}}
+  if(S.goal!==null&&!S.goalHit&&S.credits>=SHOP[S.goal].p){S.goalHit=true;if(S.goalChime)chime();toast('You can afford: '+esc(SHOP[S.goal].n))}
+  if(S.screen==='app'){
+    const c=$('#credits');if(c)c.textContent=Math.floor(S.credits);
+    const p=$('#pomoTime');if(p)p.textContent=fmt(P.left);
+    const w=$('#pomoWhy');if(w){w.textContent=whyNot();w.className='status '+(earning()?'on':'off')}
+    const b=$('#shareBar');if(b&&!document.activeElement.closest('#shareBar'))b.innerHTML=shareBarHTML();
+  }
+},1000);
+
+/* ---------- saved on this device (no birthdate is ever kept) ---------- */
+const KEYS=['user','credits','streak','tasks','pins','presets','dnd','goalChime','theme','vol','goal','ok16','season'];
+function save(){try{const o={};KEYS.forEach(k=>o[k]=S[k]);localStorage.setItem('corefocus3',JSON.stringify(o))}catch(e){}}
+try{const o=JSON.parse(localStorage.getItem('corefocus3')||'null');if(o){KEYS.forEach(k=>{if(o[k]!==undefined)S[k]=o[k]});if(!SEASONS[S.season])S.season='thanksgiving';if(S.ok16)S.screen=S.user.name?'app':'profile'}}catch(e){}
+
+/* ---------- live rooms: real people who have this page open ---------- */
+let LIVE=null,liveUn=[],PEERS=[],DB=null;
+function syncPresence(){if(LIVE)LIVE.presence({n:String(S.user.name||'Guest').slice(0,24),cam:!!S.cam,mic:!!S.mic}).catch(()=>{})}
+function leaveLive(){liveUn.forEach(f=>f());liveUn=[];if(LIVE){LIVE.leave().catch(()=>{});LIVE=null}PEERS=[]}
+async function joinLive(id){
+  leaveLive();
+  try{
+    const room=await claude.use('room');if(!room)return;
+    const nr=await room.join('cf-'+id);if(S.roomId!==id){nr.leave();return}
+    LIVE=nr;syncPresence();
+    liveUn.push(nr.onPeers(ch=>{PEERS=ch.peers.filter(p=>!p.isMe&&p.kind==='viewer');if(S.roomId===id&&!S.modal&&!S.menuFor)render()}));
+    liveUn.push(nr.on('chat',m=>{const d=m.data||{};if(typeof d.t!=='string')return;
+      S.chat.push({who:m.isMe?'You':String(d.n||'Guest').slice(0,24),t:d.t.slice(0,300),rep:typeof d.r==='string'?d.r.slice(0,90):''});
+      if(S.screen==='app'&&S.roomId===id){const a=document.activeElement,keep=a&&a.id==='chatIn'?a.value:null;render();if(keep!==null){const i=$('#chatIn');if(i){i.value=keep;i.focus()}}}}));
+  }catch(e){}
+}
+/* owner check and shared settings: only the owner sees Admin; the chosen season reaches everyone */
+(async function initCaps(){
+  try{const u=await claude.use('user');if(u){S.owner=await u.isOwner();if(S.owner)render()}}catch(e){}
+  try{DB=await claude.use('db')}catch(e){}
+  if(DB){
+    try{DB.doc('site/season').onSnapshot(snap=>{if(snap.exists){const d=snap.data()||{};if(SEASONS[d.id]&&d.id!==S.season){S.season=d.id;render()}}},()=>{})}catch(e){}
+  }
+})();
+render();
+})();
+</script>
+
+</body></html>
